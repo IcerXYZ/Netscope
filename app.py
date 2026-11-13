@@ -51,8 +51,9 @@ def get_network_intelligence(force=False):
     commands=[["journalctl","-u","ssh.service","-u","sshd.service","--since","24 hours ago","--no-pager","-o","cat"]]
     for cmd in commands:
         try:
-            raw=subprocess.run(cmd,capture_output=True,text=True,timeout=2,check=False).stdout
-            sources.append("systemd journal")
+            completed=subprocess.run(cmd,capture_output=True,text=True,timeout=2,check=False)
+            raw=completed.stdout
+            if completed.returncode==0:sources.append("systemd journal")
             for line in raw.splitlines():
                 if "Failed password" in line or "Invalid user" in line or "authentication failure" in line:
                     match=re.search(r"from ([0-9a-fA-F:.]+) port (\d+)",line)
