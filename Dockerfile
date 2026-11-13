@@ -9,4 +9,4 @@ COPY app.py .
 COPY templates ./templates
 COPY static ./static
 EXPOSE 8080
-CMD ["/bin/sh", "-c", "exec gunicorn --workers 1 --bind 0.0.0.0:${NETSCOPE_PORT:-8080} --access-logfile - --error-logfile - app:app"]
+CMD ["/bin/sh", "-c", "exec gunicorn --workers 1 --bind ${NETSCOPE_BIND:-0.0.0.0}:${NETSCOPE_PORT:-8080} --access-logfile - --error-logfile - app:app"]
