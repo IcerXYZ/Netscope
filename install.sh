@@ -110,22 +110,63 @@ ProtectHome=true
 [Install]
 WantedBy=multi-user.target
 EOF
-cat > "$BANNER_FILE" <<'BANNER'
+BANNER_SCRIPT="/usr/local/lib/netscope/banner.sh"
+install -d -m 0755 /usr/local/lib/netscope
+cat > "$BANNER_SCRIPT" <<'BANNER'
 #!/bin/sh
+[ -n "\${NETSCOPE_BANNER_SHOWN:-}" ] && return 0 2>/dev/null || exit 0
 [ -t 1 ] || return 0 2>/dev/null || exit 0
-printf '\033[38;5;208m'
+export NETSCOPE_BANNER_SHOWN=1
+printf '\033[38;5;30m'
 cat <<'NETSCOPE'
- _   _ _____ _____ ____   ____ ___  ____  _____
-| \ | | ____|_   _/ ___| / ___/ _ \|  _ \| ____|
-|  \| |  _|   | | \___ \| |  | | | | |_) |  _|
-| |\  | |___  | |  ___) | |__| |_| |  __/| |___|
-|_| \_|_____| |_| |____/ \____\___/|_|   |_____|
-                         P R O
+███╗   ██╗███████╗████████╗ ██████╗ ██████╗ ██████╗ ███████╗
+████╗  ██║██╔════╝╚══██╔══╝██╔════╝██╔═══██╗██╔══██╗██╔════╝
+██╔██╗ ██║█████╗     ██║   ██║     ██║   ██║██████╔╝█████╗
+██║╚██╗██║██╔══╝     ██║   ██║     ██║   ██║██╔═══╝ ██╔══╝
+██║ ╚████║███████╗   ██║   ╚██████╗╚██████╔╝██║     ███████╗
+╚═╝  ╚═══╝╚══════╝   ╚═╝    ╚═════╝ ╚═════╝ ╚═╝     ╚══════╝
 NETSCOPE
 printf '\033[0m'
-printf ' NetScope Pro monitoring node · %s\n\n' "$(hostname)"
+printf '\033[90m------------------------------------------------------------\033[0m\n'
+printf ' NETSCOPE  /  NETWORK INTELLIGENCE\n'
+printf '\033[90m------------------------------------------------------------\033[0m\n'
+if command -v systemctl >/dev/null 2>&1; then
+  if systemctl is-active --quiet netscope-pro.service; then service_state='\033[38;5;82mONLINE\033[0m'; else service_state='\033[38;5;196mOFFLINE\033[0m'; fi
+  if systemctl is-enabled --quiet netscope-pro.service 2>/dev/null; then auto_state='Enabled'; else auto_state='Disabled'; fi
+else service_state='Unknown'; auto_state='Unknown'; fi
+up="$(uptime -p 2>/dev/null | sed 's/^up //')"
+host="$(hostname 2>/dev/null)"
+role="$(sed -n 's/^NETSCOPE_ROLE=//p' /etc/netscope-pro.env 2>/dev/null | head -n1)"
+port="$(sed -n 's/^NETSCOPE_PORT=//p' /etc/netscope-pro.env 2>/dev/null | head -n1)"
+ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+printf '\n\033[38;5;30mSYSTEM\033[0m\n'
+printf 'Host       : %s\nService    : %b\nAutostart  : %s\nUptime     : %s\n' "$host" "$service_state" "$auto_state" "\${up:-Unknown}"
+printf '\n\033[38;5;30mDASHBOARD\033[0m\n'
+if [ "$role" = agent ]; then
+  central="$(sed -n 's/^NETSCOPE_SERVER_URL=//p' /etc/netscope-pro.env 2>/dev/null | head -n1)"
+  printf 'Central    : %s\n' "\${central:-Not configured}"
+else
+  printf 'Web        : http://%s:%s\n' "\${ip:-localhost}" "\${port:-8080}"
+fi
+printf 'Logs       : journalctl -u netscope-pro -f\n'
+printf '\n\033[90mInfrastructure monitoring.\033[0m\n\n'
 BANNER
+chmod 0644 "$BANNER_SCRIPT"
+cat > "$BANNER_FILE" <<'HOOK'
+[ -r /usr/local/lib/netscope/banner.sh ] && . /usr/local/lib/netscope/banner.sh
+HOOK
 chmod 0644 "$BANNER_FILE"
+BASHRC_FILE="/etc/bash.bashrc"
+if [[ -f "$BASHRC_FILE" ]] && ! grep -q 'NETSCOPE_BANNER_HOOK' "$BASHRC_FILE"; then
+ cat >> "$BASHRC_FILE" <<'HOOK'
+
+# NETSCOPE_BANNER_HOOK
+if [ -n "$PS1" ] && [ -r /usr/local/lib/netscope/banner.sh ]; then
+    . /usr/local/lib/netscope/banner.sh
+fi
+# END_NETSCOPE_BANNER_HOOK
+HOOK
+fi
 run_step "Reloading system service manager" systemctl daemon-reload
 run_step "Starting NetScope in the background" systemctl enable --now netscope-pro.service
 sleep 1
