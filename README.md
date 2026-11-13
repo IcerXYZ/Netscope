@@ -75,7 +75,7 @@ nano .env
 docker compose up -d --build
 ```
 
-For a single host, keep `NETSCOPE_ROLE=single`. For the central dashboard, set `NETSCOPE_ROLE=server`, choose a strong `NETSCOPE_AGENT_TOKEN`, and set the dashboard port if needed. Open `http://SERVER-IP:8080` (or your selected port). The central token must be the same on every agent.
+For a single host, keep `NETSCOPE_ROLE=single`. For the central dashboard, set `NETSCOPE_ROLE=server`, choose a strong `NETSCOPE_AGENT_TOKEN`, and set the dashboard port if needed. Generate a token with `openssl rand -hex 32`, then place it in `.env`, for example `NETSCOPE_AGENT_TOKEN=paste-generated-value`. Open `http://SERVER-IP:8080` (or your selected port). The central token must be the same on every agent.
 
 ### Add a Docker agent on another Linux machine
 
