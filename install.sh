@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 APP_DIR="/opt/netscope"; SERVICE_USER="netscope"; SERVICE_FILE="/etc/systemd/system/netscope.service"
-BANNER_FILE="/etc/profile.d/netscope-banner.sh"; ENV_FILE="/etc/netscope.env"; LEGACY_ENV_FILE="/etc/netscope.env"; LOG_FILE="/var/log/netscope-install.log"
+BANNER_FILE="/etc/profile.d/netscope-banner.sh"; ENV_FILE="/etc/netscope.env"; LEGACY_ENV_FILE="/etc/netscope-pro.env"; LOG_FILE="/var/log/netscope-install.log"
 SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"; PORT=8080; HOST=0.0.0.0; ROLE=single; ASSUME_YES=0; USE_UFW=0
 logo() {
  clear 2>/dev/null || true; printf '\033[38;5;208m'
