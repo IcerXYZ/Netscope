@@ -29,11 +29,11 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$APT_SIGNING_KEY" || { echo "Missing APT_SIGNING_KEY secret"; exit 1; }
-          mkdir -p "$RUNNER_TEMP/gnupg" public/apt/pool/main/n/netscope-pro public/apt/dists/stable/main/binary-all
+          mkdir -p "$RUNNER_TEMP/gnupg" public/apt/pool/main/n/netscope public/apt/dists/stable/main/binary-all
           chmod 700 "$RUNNER_TEMP/gnupg"
           export GNUPGHOME="$RUNNER_TEMP/gnupg"
           printf '%s' "$APT_SIGNING_KEY" | gpg --batch --import
-          cp dist/*.deb public/apt/pool/main/n/netscope-pro/
+          cp dist/*.deb public/apt/pool/main/n/netscope/
           cd public/apt
           dpkg-scanpackages --arch all pool /dev/null > dists/stable/main/binary-all/Packages
           gzip -9c dists/stable/main/binary-all/Packages > dists/stable/main/binary-all/Packages.gz
