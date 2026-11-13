@@ -41,6 +41,7 @@ fi
 # Stop the previous service name during an upgrade; keep its data/config.
 systemctl disable --now netscope-pro.service >/dev/null 2>&1 || true
 rm -f /etc/systemd/system/netscope-pro.service
+rm -rf /opt/netscope-pro
 logo
 echo "How should this machine be used?"
 echo "  1) Single host      Monitor only this machine"
