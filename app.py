@@ -4,30 +4,56 @@ from flask import Flask, jsonify, render_template, request, redirect, url_for, s
 from werkzeug.security import check_password_hash
 from datetime import timedelta
 import os, platform, psutil, socket, time, json, threading, urllib.request, hmac, subprocess, re, collections
+from security import Settings, Limiter, Sessions, secure_opener, token_matches
+from telemetry_schema import validate as validate_telemetry
+import secrets
+settings = Settings()
 app=Flask(__name__)
 app.config.update(
-    SECRET_KEY=os.environ.get("NETSCOPE_SECRET_KEY") or os.urandom(32),
+    SECRET_KEY=settings.secret, TRUSTED_HOSTS=settings.hosts,
     SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Strict",
-    SESSION_COOKIE_SECURE=False, PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
-    MAX_CONTENT_LENGTH=1024 * 1024,
+    SESSION_COOKIE_SECURE=settings.tls, SESSION_REFRESH_EACH_REQUEST=False,
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=8), MAX_CONTENT_LENGTH=262144,
+    MAX_FORM_MEMORY_SIZE=16384, MAX_FORM_PARTS=8,
 )
-_login_attempts={}; _login_lock=threading.Lock(); _agent_report_times={}
-
-def auth_enabled():
-    return os.environ.get("NETSCOPE_AUTH_ENABLED","false").lower() in ("1","true","yes","on")
+limiter=Limiter(); sessions=Sessions(); outbound=secure_opener()
 
 def dashboard_authenticated():
-    return not auth_enabled() or bool(session.get("netscope_authenticated"))
+    return sessions.valid(session.get("sid"))
+
+def csrf_token():
+    if "csrf" not in session: session["csrf"]=secrets.token_urlsafe(32)
+    return session["csrf"]
+
+app.jinja_env.globals["csrf_token"]=csrf_token
 
 @app.before_request
 def protect_dashboard():
-    if request.endpoint in ("login", "logout", "health", "agent_report") or request.path.startswith("/static/"):
+    # Let Flask render invalid-host errors without touching untrusted host data.
+    if request.routing_exception: return None
+    if settings.tls and not request.is_secure:
+        return jsonify({"error":"HTTPS required"}),400
+    if settings.role=="agent" and request.endpoint!="health":
+        return jsonify({"error":"agent has no dashboard"}),404
+    if request.endpoint=="agent_report":
+        if settings.role!="server": return jsonify({"error":"not a central server"}),404
+        if not limiter.allow("reports-global",600,60) or not limiter.allow(("reports",request.remote_addr),30,60):
+            return jsonify({"error":"rate limit exceeded"}),429
         return None
-    if dashboard_authenticated():
-        return None
-    if request.path.startswith("/api/"):
-        return jsonify({"error":"authentication required"}), 401
-    return redirect(url_for("login", next=request.path))
+    if request.method=="POST":
+        origin=request.headers.get("Origin")
+        expected=request.host_url.rstrip("/")
+        if origin and origin!=expected: return jsonify({"error":"invalid origin"}),403
+        supplied=request.form.get("csrf_token","")
+        known=session.get("csrf","")
+        if not isinstance(known,str) or not known or not hmac.compare_digest(known.encode(),supplied.encode()):
+            return jsonify({"error":"invalid CSRF token"}),403
+    if request.endpoint in ("login","health","static"): return None
+    if not dashboard_authenticated():
+        if request.path.startswith("/api/"): return jsonify({"error":"authentication required"}),401
+        return redirect(url_for("login"))
+    if request.path.startswith("/api/") and not limiter.allow(("telemetry",session.get("sid")),60,60):
+        return jsonify({"error":"rate limit exceeded"}),429
 
 @app.after_request
 def security_headers(response):
@@ -36,45 +62,45 @@ def security_headers(response):
     response.headers["Referrer-Policy"]="no-referrer"
     response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=()"
     response.headers["Content-Security-Policy"]="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
-    response.headers["Cache-Control"]="no-store" if request.path.startswith("/api/") or request.path in ("/","/login") else response.headers.get("Cache-Control","")
+    response.headers["Cache-Control"]="no-store"
+    if settings.tls: response.headers["Strict-Transport-Security"]="max-age=31536000"
     return response
 
 @app.get("/login")
 @app.post("/login")
 def login():
-    if not auth_enabled(): return redirect(url_for("index"))
     if request.method=="GET": return render_template("login.html", error="")
-    ip=request.remote_addr or "unknown"; now=time.time()
-    with _login_lock:
-        attempts=[t for t in _login_attempts.get(ip,[]) if now-t<300]
-        if len(attempts)>=5:
-            _login_attempts[ip]=attempts
-            return render_template("login.html", error="Too many attempts. Wait five minutes."), 429
-        attempts.append(now); _login_attempts[ip]=attempts
-    username=request.form.get("username","")[:128]
+    if not limiter.allow("login-global",30,300) or not limiter.allow(("login",request.remote_addr),5,300):
+        return render_template("login.html",error="Too many attempts. Wait five minutes."),429
+    username=request.form.get("username","")
     password=request.form.get("password","")
     expected_user=os.environ.get("NETSCOPE_AUTH_USERNAME","")
     password_hash=os.environ.get("NETSCOPE_AUTH_PASSWORD_HASH","")
-    if username==expected_user and password_hash and check_password_hash(password_hash,password):
-        with _login_lock: _login_attempts.pop(ip,None)
-        session.clear(); session["netscope_authenticated"]=True; session.permanent=True
-        target=request.args.get("next","/")
-        if not target.startswith("/") or target.startswith("//"): target="/"
-        return redirect(target)
-    return render_template("login.html", error="Incorrect username or password."), 401
+    valid=False
+    if len(username)<=64 and len(password)<=1024:
+        try: valid=check_password_hash(password_hash,password) and hmac.compare_digest(username.encode(),expected_user.encode())
+        except (ValueError,TypeError): pass
+    if valid:
+        sessions.revoke(session.get("sid"))
+        sid=sessions.create()
+        if sid is None: return jsonify({"error":"session capacity reached"}),503
+        session.clear(); session["sid"]=sid; session["csrf"]=secrets.token_urlsafe(32); session.permanent=True
+        return redirect(url_for("index"))
+    return render_template("login.html",error="Incorrect username or password."),401
 
 @app.post("/logout")
 def logout():
-    session.clear()
+    sessions.revoke(session.get("sid")); session.clear()
     return redirect(url_for("login"))
 
 def load_agent_tokens():
-    path=os.environ.get("NETSCOPE_AGENT_TOKENS_FILE","/etc/netscope-agent-tokens.json")
+    path=os.environ.get("NETSCOPE_AGENT_TOKENS_FILE","/etc/netscope/agents.json")
     try:
-        with open(path,encoding="utf-8") as handle: value=json.load(handle)
-        return value if isinstance(value,dict) else {}
+        with open(path,encoding="utf-8") as handle: value=json.loads(handle.read(262145))
+        return value if isinstance(value,dict) and len(value)<=256 else {}
     except (OSError,ValueError): return {}
 
+_status_cache={}; _status_cache_time=0; _status_lock=threading.Lock()
 _previous={}; _previous_time=time.monotonic(); _alert_last={}; _alert_lock=threading.Lock()
 _nodes={}; _nodes_lock=threading.Lock(); _agent_thread_started=False
 _intel_cache={}; _intel_cache_time=0; _intel_lock=threading.Lock()
@@ -85,13 +111,16 @@ def notify_discord(key,message,cooldown=900):
     now=time.time()
     with _alert_lock:
         if now-_alert_last.get(key,0)<cooldown:return
+        for stale in list(_alert_last):
+            if now-_alert_last[stale]>3600: del _alert_last[stale]
+        if len(_alert_last)>=512:return
         _alert_last[key]=now
     def send():
         try:
             body=json.dumps({"username":"NetScope","content":message[:1900]}).encode()
             req=urllib.request.Request(hook,data=body,headers={"Content-Type":"application/json"},method="POST")
-            urllib.request.urlopen(req,timeout=4).read(64)
-        except Exception as exc:app.logger.warning("Discord webhook failed: %s",exc)
+            outbound.open(req,timeout=4).read(64)
+        except Exception as exc:app.logger.warning("Discord webhook failed")
     threading.Thread(target=send,daemon=True).start()
 
 
@@ -120,23 +149,32 @@ def get_network_intelligence(force=False):
     listeners.sort(key=lambda x:(x["protocol"],x["local_port"]))
     frequent=[{"protocol":p,"port":port,"service":PORT_NAMES.get(port,"Unknown"),"observations":count} for (p,port),count in port_counts.most_common(20)]
     failed=[]; sources=[]
-    commands=[["journalctl","-u","ssh.service","-u","sshd.service","--since","24 hours ago","--no-pager","-o","short-iso"]]
+    commands=[["journalctl","-u","ssh.service","-u","sshd.service","--since","24 hours ago","-n","5000","--no-pager","-o","short-iso"]]
     for cmd in commands:
         try:
-            completed=subprocess.run(cmd,capture_output=True,text=True,timeout=2,check=False)
-            raw=completed.stdout
+            import tempfile
+            import resource
+            # prlimit affects only the child process, never the threaded web worker.
+            with tempfile.TemporaryFile() as output:
+                completed=subprocess.run(["prlimit","--fsize=524288:524288","--"]+cmd,stdout=output,stderr=subprocess.DEVNULL,timeout=2,check=False)
+                output.seek(0); raw=output.read(524288).decode("utf-8",errors="replace")
             if completed.returncode==0:sources.append("systemd journal")
             for line in raw.splitlines():
                 if "Failed password" in line or "Invalid user" in line or "authentication failure" in line:
                     match=re.search(r"from ([0-9a-fA-F:.]+) port (\d+)",line)
                     user=re.search(r"(?:for invalid user|for) ([^ ]+)",line)
                     failed.append({"time":line[:25].strip(),"source_ip":match.group(1) if match else "Unknown","source_port":int(match.group(2)) if match else 0,"service":"SSH","target_port":22,"username":user.group(1) if user else "Unknown","event":"Invalid user" if "Invalid user" in line else "Failed authentication","message":line[:240]})
-        except (FileNotFoundError,subprocess.TimeoutExpired):pass
+        except (ImportError,FileNotFoundError,subprocess.TimeoutExpired):pass
     if not sources:
         root=os.environ.get("NETSCOPE_HOST_ROOT","/").rstrip("/")
         for path in (root+"/var/log/auth.log",root+"/var/log/secure"):
             try:
-                with open(path,encoding="utf-8",errors="replace") as f: lines=f.readlines()[-5000:]
+                with open(path,"rb") as f:
+                    f.seek(0,2); size=f.tell(); f.seek(max(0,size-512*1024))
+                    raw=f.read(512*1024)
+                lines=raw.decode("utf-8",errors="replace").splitlines()
+                if size>512*1024: lines=lines[1:]
+                lines=lines[-5000:]
                 sources.append(path)
                 for line in lines:
                     if "Failed password" in line or "Invalid user" in line or "authentication failure" in line:
@@ -150,7 +188,7 @@ def get_network_intelligence(force=False):
     with _intel_lock:_intel_cache=result;_intel_cache_time=now
     return result
 
-def get_local_status():
+def collect_local_status():
     global _previous,_previous_time
     now=time.monotonic(); elapsed=max(now-_previous_time,.001)
     counters=psutil.net_io_counters(pernic=True); stats=psutil.net_if_stats(); addresses=psutil.net_if_addrs()
@@ -173,12 +211,12 @@ def get_local_status():
         if value>=90:notify_discord(socket.gethostname()+":"+metric,f"⚠️ **NetScope alert — {socket.gethostname()}**\n{metric} usage is {value:.1f}% (90% threshold).")
     return data
 
-def nodes_config():
-    try:
-        value=json.loads(os.environ.get("NETSCOPE_NODES","[]"))
-        return [{"name":str(n["name"]),"url":str(n["url"]).rstrip("/")} for n in value if n.get("name") and n.get("url")]
-    except (ValueError,TypeError,KeyError):
-        app.logger.warning("Invalid NETSCOPE_NODES JSON."); return []
+def get_local_status():
+    global _status_cache, _status_cache_time
+    with _status_lock:
+        if _status_cache and time.monotonic()-_status_cache_time<3: return _status_cache
+        _status_cache=collect_local_status(); _status_cache_time=time.monotonic()
+        return _status_cache
 
 def agent_sender():
     server=os.environ.get("NETSCOPE_SERVER_URL","").strip().rstrip("/")
@@ -191,8 +229,8 @@ def agent_sender():
             data=get_local_status()
             payload=json.dumps({"name":socket.gethostname(),"agent_id":agent_id,"data":data}).encode()
             req=urllib.request.Request(server+"/api/agent/report",data=payload,headers={"Content-Type":"application/json","X-NetScope-Token":token,"User-Agent":"NetScope-Agent/2"},method="POST")
-            with urllib.request.urlopen(req,timeout=5) as response:response.read(256)
-        except Exception as exc:app.logger.warning("Could not report to central server %s: %s",server,exc)
+            with outbound.open(req,timeout=5) as response:response.read(256)
+        except Exception as exc:app.logger.warning("Could not report to central server")
         time.sleep(5)
 
 def start_agent_sender():
@@ -209,59 +247,60 @@ def status():
         return jsonify(get_local_status())
     except Exception as exc:
         app.logger.exception("Telemetry collection failed")
-        return jsonify({"error":"Telemetry collection failed: "+str(exc)[:180]}),503
+        return jsonify({"error":"Telemetry collection failed"}),503
 
 @app.post("/api/agent/report")
 def agent_report():
-    body=request.get_json(silent=True)
-    if not isinstance(body,dict): return jsonify({"error":"invalid JSON report"}),400
-    agent_id=str(body.get("agent_id","")).strip()
-    name=str(body.get("name","")).strip()
-    data=body.get("data")
-    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}",agent_id) or not name or len(name)>80 or not isinstance(data,dict) or not isinstance(data.get("hostname"),str):
-        return jsonify({"error":"invalid report"}),400
-    token_hash=load_agent_tokens().get(agent_id)
-    supplied=request.headers.get("X-NetScope-Token","")
-    now_rate=time.time()
-    if not isinstance(token_hash,str) or not supplied or not check_password_hash(token_hash,supplied):
+    try: body=request.get_json(silent=True)
+    except (ValueError,RecursionError): return jsonify({"error":"invalid JSON report"}),400
+    if not isinstance(body,dict): return jsonify({"error":"invalid report"}),400
+    agent_id=body.get("agent_id","")
+    if not isinstance(agent_id,str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}",agent_id):
+        return jsonify({"error":"invalid agent ID"}),400
+    registry=load_agent_tokens()
+    if not token_matches(registry.get(agent_id),request.headers.get("X-NetScope-Token","")):
         return jsonify({"error":"unauthorized"}),401
-    with _nodes_lock:
-        recent=[stamp for stamp in _agent_report_times.get(agent_id,[]) if now_rate-stamp<60]
-        if len(recent)>=30: return jsonify({"error":"rate limit exceeded"}),429
-        recent.append(now_rate); _agent_report_times[agent_id]=recent
+    if not limiter.allow(("agent",agent_id),20,60): return jsonify({"error":"rate limit exceeded"}),429
+    try: data=validate_telemetry(body.get("data"))
+    except (ValueError,TypeError,OverflowError): return jsonify({"error":"invalid telemetry"}),400
     now=int(time.time())
-    with _nodes_lock:_nodes[agent_id]={"name":name,"agent_id":agent_id,"online":True,"last_seen":now,"data":data,"error":""}
+    with _nodes_lock:
+        for stale in list(_nodes):
+            if stale not in registry or now-_nodes[stale]["last_seen"]>300: del _nodes[stale]
+        _nodes[agent_id]={"name":agent_id,"agent_id":agent_id,"online":True,"last_seen":now,"data":data,"error":""}
     return jsonify({"accepted":True,"received_at":now})
 
 @app.get("/api/network-intel")
 def network_intel():
     try:
-        return jsonify(get_network_intelligence(force=True))
+        return jsonify(get_network_intelligence())
     except Exception as exc:
         app.logger.exception("Network intelligence collection failed")
-        return jsonify({"error":"Network intelligence unavailable: "+str(exc)[:160]}),503
+        return jsonify({"error":"Network intelligence unavailable"}),503
 
 @app.get("/api/cluster")
 def cluster():
-    role=os.environ.get("NETSCOPE_ROLE","single").lower(); result=[]
-    if role!="agent":
-        local=get_local_status()
-        result.append({"name":local["hostname"],"url":"local","online":True,"last_seen":int(time.time()),"data":local,"kind":"central"})
-    now=int(time.time())
-    with _nodes_lock:reports=list(_nodes.values())
+    result=[]
+    try: local=get_local_status()
+    except Exception:
+        app.logger.exception("Telemetry collection failed")
+        return jsonify({"error":"Telemetry collection failed"}),503
+    result.append({"name":local["hostname"]+" (central)","url":"local","online":True,"last_seen":int(time.time()),"data":local,"kind":"central"})
+    now=int(time.time()); registry=load_agent_tokens()
+    with _nodes_lock:
+        for key in list(_nodes):
+            if key not in registry or now-_nodes[key]["last_seen"]>300: del _nodes[key]
+        reports=list(_nodes.values())
     for node in reports:
         online=now-node["last_seen"]<=25
-        result.append({**node,"online":online,"kind":"agent","error":"" if online else "No heartbeat received for 25 seconds"})
-        if not online:notify_discord("agent-offline:"+node["agent_id"],f"🔴 **NetScope — agent offline**\n{node['name']} has stopped reporting to the central server.")
-    for node in nodes_config():
-        try:
-            req=urllib.request.Request(node["url"]+"/api/status",headers={"User-Agent":"NetScope"})
-            with urllib.request.urlopen(req,timeout=2) as response:data=json.loads(response.read(2000000))
-            result.append({"name":node["name"],"url":node["url"],"online":True,"last_seen":now,"data":data,"kind":"polling"})
-        except Exception as exc:result.append({"name":node["name"],"url":node["url"],"online":False,"last_seen":0,"error":str(exc)[:140],"data":None,"kind":"polling"})
+        result.append({**node,"online":online,"kind":"agent","error":"" if online else "No recent heartbeat"})
+        if not online:notify_discord("agent-offline:"+node["agent_id"],"NetScope agent offline: "+node['agent_id'])
     return jsonify({"mode":"cluster","nodes":result,"online":sum(1 for n in result if n["online"]),"total":len(result)})
 
 @app.get("/health")
 def health():return jsonify({"status":"ok","service":"netscope"})
 
-start_agent_sender()
+if __name__=="__main__":
+    if settings.role!="agent": raise SystemExit("Start the dashboard with Gunicorn")
+    agent_sender()
+

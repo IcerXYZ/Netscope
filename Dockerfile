@@ -1,14 +1,12 @@
 FROM python:3.12-slim
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    NETSCOPE_HOST_ROOT=/host
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py .
-COPY agent_tokens.py /usr/local/bin/netscope-agent-token
-RUN sed -i '1c#!/usr/local/bin/python' /usr/local/bin/netscope-agent-token && chmod 0750 /usr/local/bin/netscope-agent-token
+COPY requirements.lock .
+RUN pip install --no-cache-dir --require-hashes -r requirements.lock && groupadd --gid 10001 netscope && useradd --uid 10001 --gid 10001 --no-create-home netscope
+COPY app.py security.py telemetry_schema.py launch.py gunicorn.conf.py ./
 COPY templates ./templates
 COPY static ./static
+USER 10001:10001
 EXPOSE 8080
-CMD ["/bin/sh", "-c", "exec gunicorn --workers 1 --bind ${NETSCOPE_BIND:-0.0.0.0}:${NETSCOPE_PORT:-8080} --access-logfile - --error-logfile - app:app"]
+CMD ["python", "/app/launch.py"]
+

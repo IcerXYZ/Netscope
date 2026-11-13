@@ -1,20 +1,30 @@
 [Unit]
-Description=NetScope network monitoring service
+Description=NetScope monitoring service
 After=network-online.target
 Wants=network-online.target
-
 [Service]
 Type=simple
 User=netscope
 Group=netscope
 WorkingDirectory=/opt/netscope
-EnvironmentFile=-/etc/netscope.env
-ExecStart=/opt/netscope/venv/bin/gunicorn --workers 1 --bind 0.0.0.0:8080 --access-logfile - --error-logfile - app:app
+EnvironmentFile=/etc/netscope.env
+ExecStart=/opt/netscope/venv/bin/python /opt/netscope/launch.py
 Restart=on-failure
-RestartSec=3
+RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
-
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+CapabilityBoundingSet=
+UMask=0077
+MemoryMax=512M
+TasksMax=64
 [Install]
 WantedBy=multi-user.target
+

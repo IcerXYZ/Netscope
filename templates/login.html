@@ -5,7 +5,7 @@
 <div class="login-brand">NETSCOPE</div><p class="login-subtitle">NETWORK INTELLIGENCE</p>
 <h1 class="login-title">Sign in</h1><p class="login-copy">Authenticate to access this NetScope dashboard.</p>
 {% if error %}<p role="alert" class="login-error">{{ error }}</p>{% endif %}
-<form method="post" action="/login">
+<form method="post" action="/login"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label for="username">Username</label><input id="username" name="username" autocomplete="username" required maxlength="64" class="login-input">
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required class="login-input login-password">
 <button type="submit" class="login-submit">Sign in</button>

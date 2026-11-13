@@ -1,14 +1,9 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 case "${1:-}" in
-  --version|-v) echo "NetScope 0.1.0 (packaging scaffold)" ;;
-  --help|-h|"")
-    cat <<'EOF'
-NetScope (packaging scaffold)
-Usage: netscope [--help|--version]
-This package currently establishes Debian packaging only. Monitoring,
-dashboard, SSH event collection, Fail2ban and Proxmox sensor are not included.
-EOF
-    ;;
-  *) echo "Unknown option: $1" >&2; exit 2 ;;
+  setup) shift; exec bash /usr/lib/netscope/install.sh "$@" ;;
+  --version|-v) echo "NetScope 0.2.0" ;;
+  --help|-h|"") echo "NetScope: run sudo netscope setup to configure and install the service." ;;
+  *) echo "Unknown option" >&2; exit 2 ;;
 esac
+

@@ -71,3 +71,4 @@ body[data-theme=light] .welcome p,body[data-theme=light] .welcome small{color:#d
  .chart{height:190px}
 }
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+

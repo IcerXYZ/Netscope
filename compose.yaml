@@ -1,44 +1,23 @@
 services:
   netscope:
-    build:
-      context: .
-    image: netscope:latest
-    container_name: netscope
+    build: .
+    image: netscope:local
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://' + __import__('os').environ.get('NETSCOPE_BIND', '127.0.0.1') + ':' + __import__('os').environ.get('NETSCOPE_PORT', '8080') + '/health', timeout=3)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
     init: true
-    # Host networking lets NetScope see the host's real network interfaces.
+    # Required for host interface counters; no host filesystem or PID sharing.
     network_mode: host
-    # Host PID namespace lets process metadata refer to host processes.
-    pid: host
+    user: "10001:10001"
     read_only: true
+    mem_limit: 512m
+    pids_limit: 64
     tmpfs:
-      - /tmp:size=32m,noexec,nosuid
+      - /tmp:size=32m,noexec,nosuid,mode=1777
+    env_file:
+      - .env
     volumes:
-      # Read-only host root is used only to report host disk capacity.
-      - /:/host:ro,rslave
-      - /etc/netscope-agent-tokens.json:/etc/netscope-agent-tokens.json
-    environment:
-      NETSCOPE_ROLE: ${NETSCOPE_ROLE:-single}
-      NETSCOPE_HOST: 0.0.0.0
-      NETSCOPE_BIND: ${NETSCOPE_BIND:-127.0.0.1}
-      NETSCOPE_PORT: ${NETSCOPE_PORT:-8080}
-      NETSCOPE_HOST_ROOT: /host
-      NETSCOPE_SERVER_URL: ${NETSCOPE_SERVER_URL:-}
-      NETSCOPE_AGENT_TOKEN: ${NETSCOPE_AGENT_TOKEN:-}
-      NETSCOPE_AGENT_ID: ${NETSCOPE_AGENT_ID:-}
-      NETSCOPE_AUTH_ENABLED: ${NETSCOPE_AUTH_ENABLED:-false}
-      NETSCOPE_AUTH_USERNAME: ${NETSCOPE_AUTH_USERNAME:-}
-      NETSCOPE_AUTH_PASSWORD_HASH: ${NETSCOPE_AUTH_PASSWORD_HASH:-}
-      NETSCOPE_SECRET_KEY: ${NETSCOPE_SECRET_KEY:-}
-      NETSCOPE_AGENT_TOKENS_FILE: ${NETSCOPE_AGENT_TOKENS_FILE:-/etc/netscope-agent-tokens.json}
-      NETSCOPE_DISCORD_WEBHOOK: ${NETSCOPE_DISCORD_WEBHOOK:-}
+      - ./runtime:/etc/netscope:ro
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+
