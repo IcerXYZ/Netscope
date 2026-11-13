@@ -118,8 +118,8 @@ BANNER_SCRIPT="/usr/local/lib/netscope/banner.sh"
 install -d -m 0755 /usr/local/lib/netscope
 cat > "$BANNER_SCRIPT" <<'BANNER'
 #!/bin/sh
-[ -n "\${NETSCOPE_BANNER_SHOWN:-}" ] && return 0 2>/dev/null || exit 0
-[ -t 1 ] || return 0 2>/dev/null || exit 0
+if [ -n "${NETSCOPE_BANNER_SHOWN:-}" ]; then return 0; fi
+if [ ! -t 1 ]; then return 0; fi
 export NETSCOPE_BANNER_SHOWN=1
 printf '\033[38;5;30m'
 cat <<'NETSCOPE'
