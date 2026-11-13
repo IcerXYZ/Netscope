@@ -1,141 +1,136 @@
 # NetScope Pro
 
-**A clean, lightweight dashboard for monitoring Linux hosts and small server clusters.**
+**A friendly central dashboard for monitoring multiple Debian/Ubuntu machines on one network.**
 
-NetScope Pro gives you a quick overview of CPU, memory, storage, uptime, IP addresses, network traffic, interfaces and running processes. It is designed for Debian and Ubuntu VMs and uses read-only system telemetry.
+NetScope has three setup modes:
+
+- **Single host:** monitor just this machine.
+- **Central server:** one dashboard collects reports from all your agents.
+- **Agent:** a lightweight monitor sends this machine's statistics to your central server every five seconds.
+
+The dashboard shows CPU, RAM, disk, uptime, IP address, system details, network interfaces, traffic rates and process metadata. It is read-only and does not capture packet payloads or save PCAP files.
 
 ## Quick install
 
-Run these commands on your Debian/Ubuntu VM:
+On each Debian/Ubuntu machine:
 
-```bash
+\`\`\`bash
 sudo apt update
 sudo apt install -y git
 git clone https://github.com/IcerXYZ/Netscope.git
 cd Netscope
 sudo bash install.sh
-```
+\`\`\`
 
-The guided installer:
-- Shows the NetScope shell logo.
-- Lets you choose the dashboard port and listen address.
-- Optionally configures a Discord webhook without displaying the secret.
-- Creates a dedicated service account and Python virtual environment.
-- Installs and starts the systemd service.
-- Adds the NetScope logo to interactive shell logins.
+The animated installer guides you through setup. It shows a compact rotating progress indicator while installing; detailed output is saved to \`/var/log/netscope-install.log\`.
 
-When installation finishes, open the URL printed by the installer. The default is `http://VM-IP:8080`.
+## Set up one dashboard for your network
 
-## Dashboard guide
+### 1. Install the central server
 
-The dashboard refreshes automatically every three seconds.
+On the machine that will host the dashboard, run the installer and choose:
 
-| Section | What it shows |
-| --- | --- |
-| Resource usage | CPU, RAM, root disk and uptime |
-| Host identity | Primary IPv4, hostname, boot time and OS |
-| Traffic overview | Live download/upload rates and a short traffic history |
-| System details | Kernel, CPU count/frequency, load average and swap |
-| Network totals | Bytes, packets, errors and drops |
-| Network interfaces | Per-interface IPv4, link state, speed and traffic; searchable |
-| Top processes | The eight processes using the most memory |
+\`2) Central server\`
 
-Use the **Single host** button for the current server. Use **Cluster** to see the current server and any remote agents configured below. The IP and hostname copy buttons copy those values to your clipboard.
+The installer creates a secure random enrollment token and displays it. Copy this token; you will need it when installing each agent.
 
-## Configure a cluster
+Open the dashboard at \`http://CENTRAL-SERVER-IP:8080\`.
 
-Install NetScope Pro on each machine you want to monitor. On the central dashboard server, edit:
+### 2. Install agents on the other machines
 
-```bash
-sudo nano /etc/netscope-pro.env
-```
+On every Debian/Ubuntu machine you want to monitor:
 
-Add a JSON array of remote nodes. Replace the sample names and addresses with the real management IPs:
+1. Clone the same repository and run \`sudo bash install.sh\`.
+2. Choose \`3) Agent\`.
+3. Enter the central dashboard URL, for example \`http://192.168.6.20:8080\`.
+4. Enter the enrollment token from the central server.
 
-```ini
-NETSCOPE_NODES=[{"name":"pve-node-2","url":"http://192.168.6.32:8080"},{"name":"pve-node-3","url":"http://192.168.6.33:8080"}]
-```
+Agents send their telemetry to the central server every five seconds. They appear automatically in **Whole network**; no static IP list or manual node JSON is required. Give the central server a stable LAN IP or DHCP reservation so agents can always find it.
 
-You can start from [netscope-pro.env.example](netscope-pro.env.example). Then restart the central service:
+### 3. Network and firewall
 
-```bash
-sudo systemctl restart netscope-pro
-```
+- The central server must accept TCP connections on the dashboard port (default \`8080\`) from your trusted LAN.
+- Agents make outbound connections to the central server; they do not need inbound firewall ports opened.
+- Agent installations bind their local service to \`127.0.0.1\` by default. The central server listens on the configured address (default \`0.0.0.0\`).
+- Use a trusted LAN or VPN. Do not expose the dashboard to the public internet. The dashboard does not have user accounts or built-in login.
+- The enrollment token is a shared secret. Keep it private and use HTTPS or a trusted management network when crossing untrusted networks.
 
-The central server must be able to reach each remote node's `/api/status` endpoint. Cluster mode is a lightweight polling overview, not a distributed database, failover controller or full Proxmox manager.
+An agent is marked offline after 25 seconds without a heartbeat. Reports are held in the central server's memory; after a central-server restart, agents automatically reconnect and repopulate the list. This is a live monitoring view, not historical storage or high availability.
 
-## Discord notifications
+## Dashboard
 
-The installer can ask for a Discord webhook. You can also configure it manually in `/etc/netscope-pro.env`:
+Choose **This machine** to view the central server's own detailed telemetry. Choose **Whole network** to view all connected machines, online status, IP, CPU, RAM, disk, uptime and combined network throughput.
 
-```ini
+## Discord alerts
+
+The installer keeps an existing Discord webhook in \`/etc/netscope-pro.env\`. To configure one manually:
+
+\`\`\`ini
 NETSCOPE_DISCORD_WEBHOOK=https://discord.com/api/webhooks/REPLACE_ME
-```
+\`\`\`
 
-Restart NetScope after changing the file. Rate-limited notifications are sent when local CPU, RAM or disk reaches 90%, or when a configured cluster node cannot be reached.
+Restart the service after changing the file:
 
-**Keep your webhook private.** The real webhook belongs only in `/etc/netscope-pro.env`, never in GitHub, screenshots or chat messages. The example file contains no real secret.
-
-## Service commands
-
-```bash
-# Check service status
-sudo systemctl status netscope-pro
-
-# Follow live logs
-sudo journalctl -u netscope-pro -f
-
-# Restart the service
+\`\`\`bash
 sudo systemctl restart netscope-pro
+\`\`\`
 
-# Update to the latest GitHub version
+Alerts are rate-limited. CPU, RAM or disk at 90% triggers a resource alert. Central servers can also notify when an agent stops reporting.
+
+**Never put a real webhook or enrollment token in GitHub, screenshots or chat messages.**
+
+## Useful commands
+
+\`\`\`bash
+sudo systemctl status netscope-pro
+sudo journalctl -u netscope-pro -f
+sudo systemctl restart netscope-pro
+\`\`\`
+
+Update an existing installation:
+
+\`\`\`bash
 cd ~/Netscope
 git pull origin main
 sudo bash install.sh
+\`\`\`
 
-# Remove NetScope Pro
+The installer preserves the existing Discord webhook and keeps the central server's enrollment token when updating it.
+
+Remove NetScope:
+
+\`\`\`bash
 cd ~/Netscope
 sudo bash uninstall.sh
-```
+\`\`\`
 
-The installer keeps the existing private configuration file and shell login logo when updating.
+## Configuration
 
-## Security notes
+Private settings are stored in \`/etc/netscope-pro.env\` with root-only permissions.
 
-- The dashboard does not include user accounts or built-in authentication.
-- Do not expose the dashboard directly to the public internet. Restrict its port to a trusted LAN/VPN or put it behind an authenticated reverse proxy.
-- Use HTTPS or a trusted management network when connecting remote cluster agents.
-- The service runs as a dedicated unprivileged `netscope` user.
-- NetScope reads operating-system counters and process metadata. It does not record packet payloads or save PCAP files.
+- \`NETSCOPE_ROLE=single|server|agent\`
+- \`NETSCOPE_AGENT_TOKEN\` shared by the central server and its agents
+- \`NETSCOPE_SERVER_URL\` set on agents
+- \`NETSCOPE_DISCORD_WEBHOOK\` optional private Discord webhook
 
 ## Troubleshooting
 
-**Dashboard does not open**
-```bash
-sudo systemctl status netscope-pro
-sudo journalctl -u netscope-pro -n 80 --no-pager
-```
+Installer details:
 
-Check that the VM IP and configured port are correct and that your firewall allows access from your trusted management network.
+\`\`\`bash
+sudo tail -n 80 /var/log/netscope-install.log
+\`\`\`
 
-**A cluster node appears offline**
+Service logs:
 
-From the central VM, check that the node's dashboard is reachable:
+\`\`\`bash
+sudo journalctl -u netscope-pro -n 100 --no-pager
+\`\`\`
 
-```bash
-curl http://192.168.6.32:8080/api/status
-```
+If an agent does not appear, verify the central server URL and token, then from the agent check that the central dashboard responds:
 
-Check the node IP, port, service status and firewall rules.
+\`\`\`bash
+curl -I http://CENTRAL-SERVER-IP:8080/health
+\`\`\`
 
-**No IP address is shown**
-
-Check that the VM network interface is connected and has an IPv4 address:
-
-```bash
-ip -br address
-```
-
----
-
-**NetScope Pro** · Simple visibility for your infrastructure.
+**NetScope Pro** · One dashboard. Your whole network.
