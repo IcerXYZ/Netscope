@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 APP_DIR="/opt/netscope-pro"; SERVICE_USER="netscope"; SERVICE_FILE="/etc/systemd/system/netscope-pro.service"
 BANNER_FILE="/etc/profile.d/netscope-banner.sh"; ENV_FILE="/etc/netscope-pro.env"; LOG_FILE="/var/log/netscope-install.log"
-SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"; PORT=8080; HOST=0.0.0.0; ROLE=single; ASSUME_YES=0
+SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"; PORT=8080; HOST=0.0.0.0; ROLE=single; ASSUME_YES=0; USE_UFW=0
 logo() {
  clear 2>/dev/null || true; printf '\033[38;5;208m'
  cat <<'LOGO'
@@ -72,6 +72,10 @@ else
  fi
 fi
 set_env NETSCOPE_ROLE "$ROLE"; set_env NETSCOPE_PORT "$PORT"; set_env NETSCOPE_HOST "$HOST"
+if [[ "$ASSUME_YES" -eq 0 ]]; then
+ read -r -p "Would you like NetScope to configure UFW firewall rules? [y/N]: " ufw_answer || true
+ case "$ufw_answer" in [Yy]|[Yy][Ee][Ss]) USE_UFW=1;; *) USE_UFW=0;; esac
+fi
 if [[ "$ASSUME_YES" -eq 0 ]]; then
  echo; echo "READY TO INSTALL"; echo "  Machine role : $ROLE"
  if [[ "$ROLE" == agent ]]; then echo "  Central URL  : $SERVER_URL"; else echo "  Dashboard    : http://<machine-IP>:$PORT"; fi
@@ -168,6 +172,16 @@ fi
 HOOK
 fi
 run_step "Reloading system service manager" systemctl daemon-reload
+if [[ "$USE_UFW" -eq 1 ]]; then
+ run_step "Installing UFW firewall" apt-get install -y -qq ufw
+ run_step "Allowing SSH on TCP 22" ufw allow 22/tcp
+ run_step "Allowing HTTP on TCP 80" ufw allow 80/tcp
+ run_step "Allowing NetScope port TCP $PORT" ufw allow "$PORT/tcp"
+ run_step "Enabling UFW firewall" ufw --force enable
+ echo "UFW enabled: allowed TCP ports 22, 80 and $PORT."
+else
+ echo "UFW setup skipped; existing firewall settings were left unchanged."
+fi
 run_step "Starting NetScope in the background" systemctl enable --now netscope-pro.service
 sleep 1
 if ! systemctl is-active --quiet netscope-pro.service; then systemctl --no-pager --full status netscope-pro.service || true; echo "Service failed. Check: journalctl -u netscope-pro -n 80"; exit 1; fi
