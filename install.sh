@@ -55,6 +55,15 @@ fi
 if [[ "$ROLE" == agent ]]; then
  HOST=127.0.0.1
  ACCESS_MODE=localhost
+ LAN_CIDR="$(python3 - <<'PY'
+import ipaddress, subprocess
+try:
+ for line in subprocess.check_output(["ip","-o","-f","inet","addr","show","scope","global"],text=True).splitlines():
+  candidate=line.split()[3]; iface=ipaddress.ip_interface(candidate)
+  if iface.ip.is_private and not iface.ip.is_loopback: print(candidate); break
+except Exception: pass
+PY
+)"
  if [[ "$ASSUME_YES" -eq 0 ]]; then
   SERVER_URL="$(ask 'Central dashboard URL' 'http://192.168.6.20:8080')"
   AGENT_ID="$(ask 'Unique agent ID (e.g. proxmox-node-01)' "$(hostname -s)")"
@@ -226,15 +235,15 @@ fi
 run_step "Reloading system service manager" systemctl daemon-reload
 if [[ "$USE_UFW" -eq 1 ]]; then
  run_step "Installing UFW firewall" apt-get install -y -qq ufw
- if [[ -n "$LAN_CIDR" ]]; then
+ if [[ -z "$LAN_CIDR" ]]; then
+  echo "UFW was not enabled: no private LAN subnet was detected. Configure firewall rules manually to avoid locking yourself out."
+ else
   run_step "Allowing SSH from private LAN $LAN_CIDR" ufw allow from "$LAN_CIDR" to any port 22 proto tcp
   if [[ "$ACCESS_MODE" == lan ]]; then
    run_step "Allowing NetScope from private LAN $LAN_CIDR" ufw allow from "$LAN_CIDR" to any port "$PORT" proto tcp
   else
    echo "Localhost mode: no NetScope inbound firewall rule added."
   fi
- else
-  echo "No private LAN subnet detected; review SSH firewall access before enabling UFW."
  fi
  run_step "Enabling UFW firewall" ufw --force enable
  echo "UFW enabled with private-subnet-only access rules."
