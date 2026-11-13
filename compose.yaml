@@ -22,7 +22,7 @@ services:
     volumes:
       # Read-only host root is used only to report host disk capacity.
       - /:/host:ro,rslave
-      - /etc/netscope-agent-tokens.json:/etc/netscope-agent-tokens.json:ro
+      - /etc/netscope-agent-tokens.json:/etc/netscope-agent-tokens.json
     environment:
       NETSCOPE_ROLE: ${NETSCOPE_ROLE:-single}
       NETSCOPE_HOST: 0.0.0.0
