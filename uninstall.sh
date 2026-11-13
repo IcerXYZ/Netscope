@@ -8,7 +8,7 @@ rm -f /etc/systemd/system/netscope.service /etc/profile.d/netscope-banner.sh
 if [[ -f /etc/bash.bashrc ]]; then sed -i '/^# NETSCOPE_BANNER_HOOK$/,/^# END_NETSCOPE_BANNER_HOOK$/d' /etc/bash.bashrc; fi
 rm -rf /usr/local/lib/netscope
 systemctl daemon-reload
-rm -rf /opt/netscope
+rm -rf /opt/netscope /opt/netscope-pro
 if id netscope >/dev/null 2>&1; then userdel netscope 2>/dev/null || true; fi
 echo "NetScope service, files and terminal banner removed."
 echo "System Python packages and network settings were not changed."
