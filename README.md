@@ -57,7 +57,7 @@ During installation, NetScope asks whether you want it to configure UFW. If you 
 - Use a trusted LAN or VPN. Do not expose the dashboard to the public internet. Dashboard login is optional and can be enabled in the installer. When enabled, use the configured username/password. NetScope binds to a private LAN IPv4 address by default, not all interfaces; localhost-only mode is also available. Do not forward the dashboard port from your router.
 - Each agent uses its own unique token. On the central server, create one with `netscope-agent-token add proxmox-node-01`, then enter that ID and token when installing the corresponding agent. Revoke it with `netscope-agent-token revoke proxmox-node-01`. Tokens are stored as password hashes on the central server and the raw token is shown only once. HTTP is currently used, so only use a trusted LAN or VPN; HTTPS support is planned.
 
-An agent is marked offline after 25 seconds without a heartbeat. Reports are held in the central server's memory; after a central-server restart, agents automatically reconnect and repopulate the list. This is a live monitoring view, not historical storage or high availability.
+After upgrading an existing central server, create a unique token for every agent and update each agent's `/etc/netscope.env` with its `NETSCOPE_AGENT_ID` and new `NETSCOPE_AGENT_TOKEN`, then restart that agent. The old shared token is no longer accepted. An agent is marked offline after 25 seconds without a heartbeat. Reports are held in the central server's memory; after a central-server restart, agents automatically reconnect and repopulate the list. This is a live monitoring view, not historical storage or high availability.
 
 ## Docker deployment
 
