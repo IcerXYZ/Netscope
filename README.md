@@ -8,7 +8,7 @@ NetScope has three setup modes:
 - **Central server:** one dashboard collects reports from all your agents.
 - **Agent:** a lightweight monitor sends this machine's statistics to your central server every five seconds.
 
-The dashboard shows CPU, RAM, disk, uptime, IP address, system details, network interfaces, traffic rates and process metadata. It is read-only and does not capture packet payloads or save PCAP files.
+The dashboard shows CPU, RAM, disk, uptime, IP address, system details, network interfaces, traffic rates and process metadata. NetScope can be installed directly on Debian/Ubuntu or run as a Docker Compose service. It is read-only and does not capture packet payloads or save PCAP files.
 
 ## Quick install
 
@@ -58,6 +58,59 @@ During installation, NetScope asks whether you want it to configure UFW. If you 
 - The enrollment token is a shared secret. Keep it private and use HTTPS or a trusted management network when crossing untrusted networks.
 
 An agent is marked offline after 25 seconds without a heartbeat. Reports are held in the central server's memory; after a central-server restart, agents automatically reconnect and repopulate the list. This is a live monitoring view, not historical storage or high availability.
+
+## Docker deployment
+
+Docker is supported on **Linux hosts**. The Compose setup uses host networking and the host PID namespace so NetScope can read the real machine's network interfaces and process metadata. A read-only host-root mount is used for host disk capacity. The container filesystem itself stays read-only, all Linux capabilities are dropped, and privilege escalation is disabled.
+
+### Central server or single host
+
+Install Docker Engine and the Docker Compose plugin first. Then:
+
+```bash
+git clone https://github.com/IcerXYZ/Netscope.git
+cd Netscope
+cp .env.example .env
+nano .env
+docker compose up -d --build
+```
+
+For a single host, keep `NETSCOPE_ROLE=single`. For the central dashboard, set `NETSCOPE_ROLE=server`, choose a strong `NETSCOPE_AGENT_TOKEN`, and set the dashboard port if needed. Open `http://SERVER-IP:8080` (or your selected port). The central token must be the same on every agent.
+
+### Add a Docker agent on another Linux machine
+
+On each monitored machine, clone the repository and create its own `.env`:
+
+```ini
+NETSCOPE_ROLE=agent
+NETSCOPE_PORT=8080
+NETSCOPE_BIND=127.0.0.1
+NETSCOPE_SERVER_URL=http://SERVER-IP:8080
+NETSCOPE_AGENT_TOKEN=PASTE_THE_CENTRAL_TOKEN_HERE
+```
+
+Then run:
+
+```bash
+docker compose up -d --build
+```
+
+The agent reports to the central server every five seconds. It does not need an inbound firewall port. Keep the token secret.
+
+### Docker management
+
+```bash
+docker compose ps
+docker compose logs -f
+docker compose restart
+docker compose pull
+docker compose up -d --build
+docker compose down
+```
+
+Edit `.env` and recreate the container after changing its settings.
+
+**Docker notes:** This Compose file is intended for Linux Docker hosts. It uses `network_mode: host`, so Compose port mappings are not used; the dashboard listens directly on the host at the configured port. Permit that TCP port on your LAN firewall for a central server. Docker Desktop on Windows/macOS does not provide the same host network/PID visibility, so full host telemetry is not guaranteed there. The read-only `/:/host` mount exposes host files to the container for disk reporting; only run this trusted image and do not publish it to an untrusted registry. The dashboard itself has no built-in login: keep it on a trusted LAN/VPN or behind an authenticated reverse proxy.
 
 ## Dashboard
 
