@@ -60,7 +60,7 @@ def get_network_intelligence(force=False):
                     failed.append({"time":"","source_ip":match.group(1) if match else "Unknown","source_port":int(match.group(2)) if match else 0,"service":"SSH","target_port":22,"username":user.group(1) if user else "Unknown","event":"Invalid user" if "Invalid user" in line else "Failed authentication","message":line[:240]})
         except (FileNotFoundError,subprocess.TimeoutExpired):pass
     if not sources:
-        for path in ("/var/log/auth.log","/var/log/secure"):
+        root=os.environ.get("NETSCOPE_HOST_ROOT","/").rstrip("/")\n        for path in (root+"/var/log/auth.log",root+"/var/log/secure"):
             try:
                 with open(path,encoding="utf-8",errors="replace") as f: lines=f.readlines()[-5000:]
                 sources.append(path)
