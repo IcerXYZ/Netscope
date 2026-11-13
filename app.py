@@ -74,7 +74,12 @@ def start_agent_sender():
 @app.get("/")
 def index():return render_template("index.html")
 @app.get("/api/status")
-def status():return jsonify(get_local_status())
+def status():
+    try:
+        return jsonify(get_local_status())
+    except Exception as exc:
+        app.logger.exception("Telemetry collection failed")
+        return jsonify({"error":"Telemetry collection failed: "+str(exc)[:180]}),503
 
 @app.post("/api/agent/report")
 def agent_report():
