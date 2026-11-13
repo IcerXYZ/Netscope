@@ -11,9 +11,8 @@ logo() {
 |  \| |  _|   | | \___ \| |  | | | | |_) |  _|
 | |\  | |___  | |  ___) | |__| |_| |  __/| |___
 |_| \_|_____| |_| |____/ \____\___/|_|   |_____|
-                         P R O
 LOGO
- printf '\033[0m'; echo "             NETWORK MONITORING SETUP"; echo "  ------------------------------------------------"
+ printf '\033[0m'; echo "             NETWORK INTELLIGENCE"; echo "  ------------------------------------------------"
 }
 ask() { local p="$1" d="$2" a; read -r -p "$p [$d]: " a || true; if [[ -n "$a" ]]; then printf '%s' "$a"; else printf '%s' "$d"; fi; }
 set_env() {
@@ -80,7 +79,7 @@ if [[ "$ASSUME_YES" -eq 0 ]]; then
  read -r -p "Continue? [Y/n]: " confirm || true; if [[ -z "$confirm" ]]; then confirm=Y; fi
  case "$confirm" in [Yy]|[Yy][Ee][Ss]) ;; *) echo "Cancelled."; exit 0;; esac
 fi
-: > "$LOG_FILE"; export DEBIAN_FRONTEND=noninteractive; echo; echo "Installing NetScope Pro"
+: > "$LOG_FILE"; export DEBIAN_FRONTEND=noninteractive; echo; echo "Installing NetScope"
 run_step "Updating package lists" apt-get update -qq
 run_step "Installing Python requirements" apt-get install -y -qq python3 python3-venv python3-pip ca-certificates
 run_step "Creating service account" bash -c "id $SERVICE_USER >/dev/null 2>&1 || useradd --system --home-dir $APP_DIR --create-home --shell /usr/sbin/nologin $SERVICE_USER"
@@ -93,7 +92,7 @@ run_step "Preparing Python environment" python3 -m venv "$APP_DIR/venv"
 run_step "Installing dashboard libraries" "$APP_DIR/venv/bin/pip" install --disable-pip-version-check -q -r "$APP_DIR/requirements.txt"
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=NetScope Pro monitoring service
+Description=NetScope monitoring service
 After=network-online.target
 Wants=network-online.target
 [Service]
