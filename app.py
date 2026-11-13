@@ -11,7 +11,7 @@ app.config.update(
     SESSION_COOKIE_SECURE=False, PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
     MAX_CONTENT_LENGTH=1024 * 1024,
 )
-_login_attempts={}; _login_lock=threading.Lock()
+_login_attempts={}; _login_lock=threading.Lock(); _agent_report_times={}
 
 def auth_enabled():
     return os.environ.get("NETSCOPE_AUTH_ENABLED","false").lower() in ("1","true","yes","on")
@@ -222,6 +222,11 @@ def agent_report():
         return jsonify({"error":"invalid report"}),400
     token_hash=load_agent_tokens().get(agent_id)
     supplied=request.headers.get("X-NetScope-Token","")
+    now_rate=time.time()
+    with _nodes_lock:
+        recent=[stamp for stamp in _agent_report_times.get(agent_id,[]) if now_rate-stamp<60]
+        if len(recent)>=30: return jsonify({"error":"rate limit exceeded"}),429
+        recent.append(now_rate); _agent_report_times[agent_id]=recent
     if not isinstance(token_hash,str) or not supplied or not check_password_hash(token_hash,supplied):
         return jsonify({"error":"unauthorized"}),401
     now=int(time.time())
