@@ -115,6 +115,7 @@ PY
  if [[ "$ROLE" == server ]]; then
   echo "Central server will use individual per-agent credentials."
   echo "After installation, create one with: netscope-agent-token add <agent-id>"
+  set_env NETSCOPE_AGENT_TOKEN ""
   if [[ ! -f /etc/netscope-agent-tokens.json ]]; then install -o root -g "$SERVICE_USER" -m 0640 /dev/null /etc/netscope-agent-tokens.json; else chown root:"$SERVICE_USER" /etc/netscope-agent-tokens.json; chmod 0640 /etc/netscope-agent-tokens.json; fi
  fi
 fi
