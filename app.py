@@ -108,6 +108,6 @@ def cluster():
     return jsonify({"mode":"cluster","nodes":result,"online":sum(1 for n in result if n["online"]),"total":len(result)})
 
 @app.get("/health")
-def health():return jsonify({"status":"ok","service":"netscope-pro"})
+def health():return jsonify({"status":"ok","service":"netscope"})
 
 start_agent_sender()
