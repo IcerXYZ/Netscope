@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, json, os, secrets, sys, tempfile
+import argparse, grp, json, os, secrets, sys, tempfile
 from werkzeug.security import generate_password_hash
 PATH="/etc/netscope-agent-tokens.json"
 def read():
@@ -9,8 +9,8 @@ def read():
 def write(data):
     fd,tmp=tempfile.mkstemp(dir=os.path.dirname(PATH),prefix=".netscope-tokens-")
     try:
-        with os.fdopen(fd,"w",encoding="utf-8") as f: json.dump(data,f,indent=2); f.write("\\n")
-        os.chmod(tmp,0o600); os.replace(tmp,PATH)
+        with os.fdopen(fd,"w",encoding="utf-8") as f: json.dump(data,f,indent=2); f.write("\n")
+        os.chown(tmp,0,grp.getgrnam("netscope").gr_gid); os.chmod(tmp,0o640); os.replace(tmp,PATH)
     finally:
         if os.path.exists(tmp): os.unlink(tmp)
 p=argparse.ArgumentParser(description="Manage individual NetScope agent credentials")
