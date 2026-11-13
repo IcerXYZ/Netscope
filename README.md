@@ -189,3 +189,8 @@ curl -I http://CENTRAL-SERVER-IP:8080/health
 \`\`\`
 
 **NetScope** · One dashboard. Your whole network.
+
+
+## Dashboard preferences
+
+Open **Settings** in the left navigation to choose a 3, 5, 10 or 15 second refresh interval, enable compact spacing, or reduce animations. These preferences are stored only in that browser and do not add background services or database load. NetScope uses lightweight vanilla JavaScript and system fonts; it does not load external font libraries or charting frameworks.
