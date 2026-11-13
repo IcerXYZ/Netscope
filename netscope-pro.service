@@ -10,7 +10,7 @@ Group=netscope
 WorkingDirectory=/opt/netscope-pro
 Environment=NETSCOPE_HOST=0.0.0.0
 Environment=NETSCOPE_PORT=8080
-ExecStart=/opt/netscope-pro/venv/bin/python /opt/netscope-pro/app.py
+ExecStart=/opt/netscope-pro/venv/bin/gunicorn --workers 2 --bind 0.0.0.0:8080 app:app
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
