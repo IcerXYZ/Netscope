@@ -49,6 +49,8 @@ Agents send their telemetry to the central server every five seconds. They appea
 
 ### 3. Network and firewall
 
+During installation, NetScope asks whether you want it to configure UFW. If you answer **yes**, it installs UFW if needed, allows TCP **22** (SSH), TCP **80** (HTTP), and the dashboard port you selected, then enables the firewall. If you answer **no**, it leaves your firewall unchanged. Check that SSH really uses port 22 before enabling UFW, especially on remote servers.
+
 - The central server must accept TCP connections on the dashboard port (default \`8080\`) from your trusted LAN.
 - Agents make outbound connections to the central server; they do not need inbound firewall ports opened.
 - Agent installations bind their local service to \`127.0.0.1\` by default. The central server listens on the configured address (default \`0.0.0.0\`).
