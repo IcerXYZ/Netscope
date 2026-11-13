@@ -19,3 +19,48 @@ const defaults={theme:"dark",refresh:5,compact:false,motion:false};let prefs={..
 function savePrefs(){prefs={theme:$("theme-setting").value,refresh:Number($("refresh-setting").value)||5,compact:$("compact-setting").checked,motion:$("motion-setting").checked};try{localStorage.setItem("netscope-ui",JSON.stringify(prefs));put("settings-feedback","Preferences saved in this browser.")}catch{put("settings-feedback","Browser storage unavailable.")}applyPrefs()}
 try{const s=JSON.parse(localStorage.getItem("netscope-ui")||"null");if(s)prefs={...defaults,...s};if(![3,5,10,15].includes(Number(prefs.refresh)))prefs.refresh=5}catch{}
 document.querySelectorAll(".nav[data-page]").forEach(a=>a.addEventListener("click",e=>{e.preventDefault();if(a.dataset.page==="cluster"){mode="cluster";$("cluster-mode").classList.add("active");$("single-mode").classList.remove("active");loadCluster()}showPage(a.dataset.page);if(mode==="cluster")loadCluster();else if(latest)renderIntel(latest.network_intel||{})}));document.addEventListener("click",e=>{const go=e.target.closest("[data-go]");if(go){e.preventDefault();showPage(go.dataset.go)}});$("single-mode").onclick=()=>{mode="single";$("single-mode").classList.add("active");$("cluster-mode").classList.remove("active");put("host-context","LOCAL HOST")};$("cluster-mode").onclick=()=>{mode="cluster";$("cluster-mode").classList.add("active");$("single-mode").classList.remove("active");showPage("cluster");loadCluster()};$("theme-toggle").onclick=()=>{$("theme-setting").value=document.body.dataset.theme==="dark"?"light":"dark";savePrefs()};$("save-settings").onclick=savePrefs;$("reset-settings").onclick=()=>{prefs={...defaults};savePrefs()};$("menu").onclick=()=>$("sidebar").classList.toggle("open");$("interface-search").addEventListener("input",()=>latest&&renderHost(latest));$("connection-search").addEventListener("input",()=>renderIntel(intel));$("failed-search").addEventListener("input",()=>renderIntel(intel));window.addEventListener("resize",chart);window.addEventListener("hashchange",()=>{const p=location.hash.slice(1);if($("page-"+p))showPage(p)});applyPrefs();showPage(location.hash.slice(1)&&$("page-"+location.hash.slice(1))?location.hash.slice(1):"overview");refresh();
+
+/* Small interaction and accessibility refinements */
+(function(){
+  const sidebar=$("sidebar");
+  const closeSidebar=()=>sidebar&&sidebar.classList.remove("open");
+  document.addEventListener("click",e=>{
+    if(window.innerWidth<=780&&sidebar?.classList.contains("open")&&!e.target.closest("#sidebar")&&!e.target.closest("#menu"))closeSidebar();
+  });
+  document.addEventListener("keydown",e=>{
+    if(e.key==="Escape")closeSidebar();
+    if((e.key==="r"||e.key==="R")&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||"")){
+      e.preventDefault();refresh();toast("Refreshing telemetry…");
+    }
+    if(e.key==="/"&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||"")){
+      const pageSearch={traffic:"interface-search",connections:"connection-search",security:"failed-search"};
+      const target=$(pageSearch[currentPage]||"");
+      if(target){e.preventDefault();target.focus();}
+    }
+  });
+  document.querySelectorAll(".nav[data-page]").forEach(a=>{
+    a.addEventListener("click",()=>closeSidebar());
+    a.setAttribute("aria-label",a.textContent.trim().replace(/\s+/g," "));
+  });
+  const originalShowPage=showPage;
+  showPage=function(name){
+    originalShowPage(name);
+    document.title="NetScope | "+(name==="overview"?"Overview":name.charAt(0).toUpperCase()+name.slice(1));
+    document.querySelectorAll(".nav[data-page]").forEach(a=>{
+      if(a.dataset.page===name)a.setAttribute("aria-current","page");
+      else a.removeAttribute("aria-current");
+    });
+  };
+  const single=$("single-mode");
+  if(single)single.addEventListener("click",()=>{
+    if(latest)renderIntel(latest.network_intel||{});
+    put("host-context","LOCAL HOST");
+    if(currentPage==="cluster")showPage("overview");
+  });
+  const menu=$("menu");
+  if(menu)menu.setAttribute("aria-label","Open navigation menu");
+  const theme=$("theme-toggle");
+  if(theme)theme.setAttribute("aria-label","Toggle color theme");
+  const searchHints={"interface-search":"Search interfaces","connection-search":"Search connections","failed-search":"Search security events"};
+  Object.entries(searchHints).forEach(([id,label])=>{if($(id))$(id).setAttribute("aria-label",label)});
+})();
