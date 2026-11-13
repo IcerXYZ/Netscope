@@ -1,10 +1,8 @@
 # NetScope Pro
 
-NetScope Pro is a lightweight Debian/Ubuntu VM dashboard for basic system and network-interface telemetry.
+A read-only host and network monitoring dashboard for Debian/Ubuntu VMs.
 
-## Quick install (Debian 12/13 or Ubuntu)
-
-Clone the private repository on your VM (Git must be installed):
+## Interactive VM installer
 
 ```bash
 sudo apt update
@@ -14,15 +12,21 @@ cd Netscope
 sudo bash install.sh
 ```
 
-Open the URL printed by the installer, normally:
+The wizard displays the NetScope logo, asks for a TCP port and listen address, shows a summary and asks for confirmation. For unattended setup use `sudo bash install.sh --yes` (port 8080, listen on 0.0.0.0).
 
-```
-http://VM-IP:8080
-```
+When complete, open `http://VM-IP:8080` (or the configured port). The installer creates a restricted service account, Python virtual environment, systemd service and standard NetScope shell login banner. It does not change network configuration, routes, firewall rules or Proxmox bridges.
 
-The installer installs Python dependencies in an isolated virtual environment, creates a dedicated `netscope` service account, installs a systemd service, enables it at boot, and starts it. It does not change the VM's IP address, routes, firewall, Proxmox bridges, or network interfaces.
+## Dashboard data
 
-## Manage the service
+- CPU utilization, logical/physical core counts, frequency and load averages
+- RAM, swap, root filesystem and uptime
+- Rolling 60-sample live RX/TX bandwidth graph
+- Per-interface IPv4, link state, speed, MTU, byte/packet counters, errors and drops
+- Aggregate network totals and top processes by memory
+- Hostname, OS and kernel information
+- JSON health endpoint at `/health`
+
+## Service management
 
 ```bash
 sudo systemctl status netscope-pro
@@ -30,27 +34,11 @@ sudo journalctl -u netscope-pro -f
 sudo systemctl restart netscope-pro
 ```
 
-Uninstall:
+Update an existing install: `git pull && sudo bash install.sh`.
+Uninstall: `sudo bash uninstall.sh` from the cloned repository.
 
-```bash
-sudo bash uninstall.sh
-```
+## Security and scope
 
-## Current features
+There is no built-in authentication. Keep the dashboard on a trusted LAN/VPN or behind an authenticated reverse proxy; never expose its port directly to the public internet. The agent reads OS counters and process metadata. It does not implement packet capture/deep inspection, SSH login monitoring, Fail2ban integration, multi-node management or Proxmox traffic mirroring.
 
-- CPU and memory utilization
-- VM uptime and hostname
-- Per-interface receive/transmit throughput
-- Auto-refreshing web dashboard
-- systemd startup and restart on failure
-- Read-only network counters; no packet capture
-
-## Important limitations
-
-This is the first installable baseline, not the complete planned NetScope Pro feature set. SSH login event monitoring, Fail2ban integration, multi-node management, packet inspection, and Proxmox traffic mirroring are not included yet.
-
-The dashboard currently has no built-in authentication and listens on all VM interfaces at port 8080 by default. Keep it on a trusted LAN or access it through a VPN/authenticated reverse proxy. Do not expose port 8080 directly to the public internet.
-
-## Debian package / APT repository
-
-The `packaging/` directory and GitHub Actions workflows retain the Debian package and signed APT repository scaffold. The quick VM installer above is the recommended way to try this initial dashboard while APT publishing is being configured.
+The `packaging/` directory and GitHub Actions retain the Debian package and signed APT repository scaffold; the VM wizard is the supported installation path for this version.
