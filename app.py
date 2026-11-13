@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""NetScope Pro: read-only Linux telemetry with central push-agent clustering."""
+"""NetScope: read-only Linux telemetry with central push-agent clustering."""
 from flask import Flask, jsonify, render_template, request
 import os, platform, psutil, socket, time, json, threading, urllib.request, hmac
 app=Flask(__name__)
@@ -15,7 +15,7 @@ def notify_discord(key,message,cooldown=900):
         _alert_last[key]=now
     def send():
         try:
-            body=json.dumps({"username":"NetScope Pro","content":message[:1900]}).encode()
+            body=json.dumps({"username":"NetScope","content":message[:1900]}).encode()
             req=urllib.request.Request(hook,data=body,headers={"Content-Type":"application/json"},method="POST")
             urllib.request.urlopen(req,timeout=4).read(64)
         except Exception as exc:app.logger.warning("Discord webhook failed: %s",exc)
@@ -41,7 +41,7 @@ def get_local_status():
         except (psutil.NoSuchProcess,psutil.AccessDenied):pass
     data={"timestamp":int(time.time()),"hostname":socket.gethostname(),"fqdn":socket.getfqdn(),"primary_ip":next((i["ipv4"] for i in interfaces if i["ipv4"] and i["name"]!="lo"),""),"os":platform.platform(),"kernel":platform.release(),"cpu_percent":psutil.cpu_percent(interval=None),"cpu_count":psutil.cpu_count(logical=True) or 0,"cpu_physical":psutil.cpu_count(logical=False) or 0,"cpu_frequency_mhz":freq.current if freq else 0,"load_1":load[0],"load_5":load[1],"load_15":load[2],"memory_percent":mem.percent,"memory_used":mem.used,"memory_total":mem.total,"memory_available":mem.available,"swap_percent":swap.percent,"swap_used":swap.used,"swap_total":swap.total,"disk_percent":disk.percent,"disk_used":disk.used,"disk_total":disk.total,"disk_free":disk.free,"uptime":int(time.time()-psutil.boot_time()),"interfaces":interfaces,"processes":sorted(processes,key=lambda x:x["memory_percent"],reverse=True)[:8]}
     for metric,value in (("CPU",data["cpu_percent"]),("RAM",data["memory_percent"]),("Disk",data["disk_percent"])):
-        if value>=90:notify_discord(socket.gethostname()+":"+metric,f"⚠️ **NetScope Pro alert — {socket.gethostname()}**\n{metric} usage is {value:.1f}% (90% threshold).")
+        if value>=90:notify_discord(socket.gethostname()+":"+metric,f"⚠️ **NetScope alert — {socket.gethostname()}**\n{metric} usage is {value:.1f}% (90% threshold).")
     return data
 
 def nodes_config():
@@ -60,7 +60,7 @@ def agent_sender():
         try:
             data=get_local_status()
             payload=json.dumps({"name":socket.gethostname(),"agent_id":socket.gethostname(),"data":data}).encode()
-            req=urllib.request.Request(server+"/api/agent/report",data=payload,headers={"Content-Type":"application/json","X-NetScope-Token":token,"User-Agent":"NetScope-Pro-Agent/2"},method="POST")
+            req=urllib.request.Request(server+"/api/agent/report",data=payload,headers={"Content-Type":"application/json","X-NetScope-Token":token,"User-Agent":"NetScope-Agent/2"},method="POST")
             with urllib.request.urlopen(req,timeout=5) as response:response.read(256)
         except Exception as exc:app.logger.warning("Could not report to central server %s: %s",server,exc)
         time.sleep(5)
@@ -98,10 +98,10 @@ def cluster():
     for node in reports:
         online=now-node["last_seen"]<=25
         result.append({**node,"online":online,"kind":"agent","error":"" if online else "No heartbeat received for 25 seconds"})
-        if not online:notify_discord("agent-offline:"+node["agent_id"],f"🔴 **NetScope Pro — agent offline**\n{node['name']} has stopped reporting to the central server.")
+        if not online:notify_discord("agent-offline:"+node["agent_id"],f"🔴 **NetScope — agent offline**\n{node['name']} has stopped reporting to the central server.")
     for node in nodes_config():
         try:
-            req=urllib.request.Request(node["url"]+"/api/status",headers={"User-Agent":"NetScope-Pro"})
+            req=urllib.request.Request(node["url"]+"/api/status",headers={"User-Agent":"NetScope"})
             with urllib.request.urlopen(req,timeout=2) as response:data=json.loads(response.read(2000000))
             result.append({"name":node["name"],"url":node["url"],"online":True,"last_seen":now,"data":data,"kind":"polling"})
         except Exception as exc:result.append({"name":node["name"],"url":node["url"],"online":False,"last_seen":0,"error":str(exc)[:140],"data":None,"kind":"polling"})
