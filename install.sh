@@ -226,11 +226,15 @@ fi
 run_step "Reloading system service manager" systemctl daemon-reload
 if [[ "$USE_UFW" -eq 1 ]]; then
  run_step "Installing UFW firewall" apt-get install -y -qq ufw
- if [[ "$ACCESS_MODE" == lan && -n "$LAN_CIDR" ]]; then
+ if [[ -n "$LAN_CIDR" ]]; then
   run_step "Allowing SSH from private LAN $LAN_CIDR" ufw allow from "$LAN_CIDR" to any port 22 proto tcp
-  run_step "Allowing NetScope from private LAN $LAN_CIDR" ufw allow from "$LAN_CIDR" to any port "$PORT" proto tcp
+  if [[ "$ACCESS_MODE" == lan ]]; then
+   run_step "Allowing NetScope from private LAN $LAN_CIDR" ufw allow from "$LAN_CIDR" to any port "$PORT" proto tcp
+  else
+   echo "Localhost mode: no NetScope inbound firewall rule added."
+  fi
  else
-  echo "Localhost mode: no NetScope inbound firewall rule added."
+  echo "No private LAN subnet detected; review SSH firewall access before enabling UFW."
  fi
  run_step "Enabling UFW firewall" ufw --force enable
  echo "UFW enabled with private-subnet-only access rules."
