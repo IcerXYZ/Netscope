@@ -1,4 +1,4 @@
-# NetScope Pro
+# NetScope
 
 **A friendly central dashboard for monitoring multiple Debian/Ubuntu machines on one network.**
 
@@ -48,6 +48,8 @@ On every Debian/Ubuntu machine you want to monitor:
 Agents send their telemetry to the central server every five seconds. They appear automatically in **Whole network**; no static IP list or manual node JSON is required. Give the central server a stable LAN IP or DHCP reservation so agents can always find it.
 
 ### 3. Network and firewall
+
+During installation, NetScope asks whether you want it to configure UFW. If you answer **yes**, it installs UFW if needed, allows TCP **22** (SSH), TCP **80** (HTTP), and the dashboard port you selected, then enables the firewall. If you answer **no**, it leaves your firewall unchanged. Check that SSH really uses port 22 before enabling UFW, especially on remote servers.
 
 - The central server must accept TCP connections on the dashboard port (default \`8080\`) from your trusted LAN.
 - Agents make outbound connections to the central server; they do not need inbound firewall ports opened.
@@ -133,4 +135,4 @@ If an agent does not appear, verify the central server URL and token, then from 
 curl -I http://CENTRAL-SERVER-IP:8080/health
 \`\`\`
 
-**NetScope Pro** · One dashboard. Your whole network.
+**NetScope** · One dashboard. Your whole network.
