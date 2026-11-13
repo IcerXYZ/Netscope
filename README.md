@@ -75,7 +75,7 @@ nano .env
 docker compose up -d --build
 ```
 
-For a single host, keep `NETSCOPE_ROLE=single`. For the central dashboard, set `NETSCOPE_ROLE=server`, set NETSCOPE_BIND to the central machine's private LAN IPv4 address (not 0.0.0.0), enable dashboard authentication, and set a long random NETSCOPE_SECRET_KEY. Create the agent token registry on the Docker host before starting any Docker deployment: install -o root -g root -m 0644 /dev/null /etc/netscope-agent-tokens.json. The registry contains password hashes, not raw agent tokens. Open http://SERVER-LAN-IP:8080 (or your selected port). After startup, create an individual token with docker compose exec netscope netscope-agent-token add proxmox-node-01; copy the token shown once into that agent's .env.
+For a single host, keep `NETSCOPE_ROLE=single`. For the central dashboard, set `NETSCOPE_ROLE=server`, set NETSCOPE_BIND to the central machine's private LAN IPv4 address (not 0.0.0.0), enable dashboard authentication, set a long random NETSCOPE_SECRET_KEY, and configure NETSCOPE_AUTH_USERNAME plus NETSCOPE_AUTH_PASSWORD_HASH. Generate the hash after the image is built with `docker compose run --rm --no-deps netscope python -c 'from werkzeug.security import generate_password_hash; print(generate_password_hash(input(), method="scrypt"))'`, then paste it into `.env`. Create the agent token registry on the Docker host before starting any Docker deployment: install -o root -g root -m 0644 /dev/null /etc/netscope-agent-tokens.json. The registry contains password hashes, not raw agent tokens. Open http://SERVER-LAN-IP:8080 (or your selected port). After startup, create an individual token with docker compose exec netscope netscope-agent-token add proxmox-node-01; copy the token shown once into that agent's .env.
 
 ### Add a Docker agent on another Linux machine
 
@@ -111,7 +111,7 @@ docker compose down
 
 Edit `.env` and recreate the container after changing its settings.
 
-**Docker notes:** This Compose file is intended for Linux Docker hosts. It uses `network_mode: host`, so Compose port mappings are not used; the dashboard listens directly on the host at the configured port. Permit that TCP port on your LAN firewall for a central server. Docker Desktop on Windows/macOS does not provide the same host network/PID visibility, so full host telemetry is not guaranteed there. The read-only `/:/host` mount exposes host files to the container for disk reporting; only run this trusted image and do not publish it to an untrusted registry. The dashboard itself has no built-in login: keep it on a trusted LAN/VPN or behind an authenticated reverse proxy.
+**Docker notes:** This Compose file is intended for Linux Docker hosts. It uses `network_mode: host`, so Compose port mappings are not used; the dashboard listens directly on the host at the configured port. Permit that TCP port on your LAN firewall for a central server. Docker Desktop on Windows/macOS does not provide the same host network/PID visibility, so full host telemetry is not guaranteed there. The read-only `/:/host` mount exposes host files to the container for disk reporting; only run this trusted image and do not publish it to an untrusted registry. Dashboard login is optional; enable it in `.env` and configure a password hash before starting the container.
 
 ## Dashboard
 
