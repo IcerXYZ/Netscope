@@ -39,7 +39,7 @@ if [[ ! -f "$ENV_FILE" && -f /etc/netscope-pro.env ]]; then install -m 0600 /etc
 if [[ ! -f "$ENV_FILE" ]]; then install -m 0600 /dev/null "$ENV_FILE"; fi
 # Retire the previous service name during upgrades.
 systemctl disable --now netscope-pro.service >/dev/null 2>&1 || true
-rm -f /etc/systemd/system/netscope-pro.service
+rm -f /etc/systemd/system/netscope-pro.service /etc/profile.d/netscope-pro-banner.sh
 logo
 echo "How should this machine be used?"
 echo "  1) Single host      Monitor only this machine"
