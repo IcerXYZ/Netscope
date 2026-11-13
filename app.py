@@ -32,7 +32,7 @@ def get_local_status():
         ip=next((x.address for x in addresses.get(name,[]) if x.family==socket.AF_INET),"")
         interfaces.append({"name":name,"ipv4":ip,"is_up":bool(st and st.isup),"speed_mbps":st.speed if st else 0,"mtu":st.mtu if st else 0,"rx_rate":rx,"tx_rate":tx,"rx_total":c.bytes_recv,"tx_total":c.bytes_sent,"packets_recv":c.packets_recv,"packets_sent":c.packets_sent,"errors_in":c.errin,"errors_out":c.errout,"drops_in":c.dropin,"drops_out":c.dropout})
     _previous,_previous_time=next_previous,now
-    mem,swap,disk=psutil.virtual_memory(),psutil.swap_memory(),psutil.disk_usage("/")
+    mem,swap,disk=psutil.virtual_memory(),psutil.swap_memory(),psutil.disk_usage(os.environ.get("NETSCOPE_HOST_ROOT","/"))
     freq=psutil.cpu_freq(); load=os.getloadavg() if hasattr(os,"getloadavg") else [0,0,0]
     processes=[]
     for p in psutil.process_iter(["pid","name","username","memory_percent"]):
