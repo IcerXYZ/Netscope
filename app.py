@@ -223,12 +223,12 @@ def agent_report():
     token_hash=load_agent_tokens().get(agent_id)
     supplied=request.headers.get("X-NetScope-Token","")
     now_rate=time.time()
+    if not isinstance(token_hash,str) or not supplied or not check_password_hash(token_hash,supplied):
+        return jsonify({"error":"unauthorized"}),401
     with _nodes_lock:
         recent=[stamp for stamp in _agent_report_times.get(agent_id,[]) if now_rate-stamp<60]
         if len(recent)>=30: return jsonify({"error":"rate limit exceeded"}),429
         recent.append(now_rate); _agent_report_times[agent_id]=recent
-    if not isinstance(token_hash,str) or not supplied or not check_password_hash(token_hash,supplied):
-        return jsonify({"error":"unauthorized"}),401
     now=int(time.time())
     with _nodes_lock:_nodes[agent_id]={"name":name,"agent_id":agent_id,"online":True,"last_seen":now,"data":data,"error":""}
     return jsonify({"accepted":True,"received_at":now})
