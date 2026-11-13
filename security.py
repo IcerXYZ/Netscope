@@ -47,6 +47,8 @@ class Settings:
             raise ValueError('Invalid NETSCOPE_ROLE')
         self.bind = os.environ.get('NETSCOPE_BIND', '127.0.0.1')
         address = ipaddress.ip_address(self.bind)
+        if address.version != 4:
+            raise ValueError('This release supports explicit IPv4 listener addresses')
         if address.is_unspecified or address.is_multicast or not address.is_private:
             raise ValueError('Bind to a specific private or loopback address')
         self.port = int(os.environ.get('NETSCOPE_PORT', '8080'))
@@ -76,7 +78,7 @@ class Settings:
                 raise ValueError('Configure a dashboard username')
             if not re.fullmatch(r'scrypt:32768:8:1\$[A-Za-z0-9]{16}\$[a-f0-9]{128}', self.password_hash):
                 raise ValueError('Configure a scrypt dashboard password hash')
-        self.hosts = ['localhost', '127.0.0.1', '::1', self.bind]
+        self.hosts = ['localhost', '127.0.0.1', self.bind]
         for host in os.environ.get('NETSCOPE_TRUSTED_HOSTS', '').split(','):
             host = host.strip().lower()
             if not host:

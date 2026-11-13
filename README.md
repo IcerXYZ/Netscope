@@ -3,7 +3,7 @@ Read-only host and fleet monitoring for Debian/Ubuntu, with authenticated HTTPS 
 
 ## Security and supported deployment
 - All dashboards require login. Missing credentials or invalid security settings prevent startup.
-- Default bind: 127.0.0.1. For LAN access, choose a specific private IP and supply a TLS certificate/key. All-interface and public-address binds are rejected.
+- Default bind: 127.0.0.1. For LAN access, choose a specific private IPv4 address and supply a TLS certificate/key. All-interface, public-address and IPv6 binds are rejected in this release.
 - Use a certificate trusted by browsers and agents, with the actual hostname/IP in its Subject Alternative Name. Do not bypass certificate warnings or disable verification.
 - Allow the chosen port only from intended management clients/subnets using your firewall. No router port forwarding.
 - The web process runs as a restricted account. Sessions are server-side, expire absolutely after eight hours, and are revoked on logout/password change/restart.

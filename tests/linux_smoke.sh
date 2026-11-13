@@ -18,20 +18,21 @@ curl --fail --silent http://127.0.0.1:18080/health >/dev/null
 sudo openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' -keyout /etc/netscope/tls.key -out /etc/netscope/tls.crt 2>/dev/null
 sudo chown root:netscope /etc/netscope/tls.key /etc/netscope/tls.crt
 sudo chmod 0640 /etc/netscope/tls.key
+sudo install -m 0644 /etc/netscope/tls.crt /tmp/netscope-ca.crt
 printf "NETSCOPE_TLS_CERT='/etc/netscope/tls.crt'\nNETSCOPE_TLS_KEY='/etc/netscope/tls.key'\n" | sudo tee -a /etc/netscope.env >/dev/null
 sudo bash install.sh --yes
 pid_after="$(systemctl show netscope -p MainPID --value)"
 [[ "$pid_before" != "$pid_after" ]]
-curl --fail --silent --cacert /etc/netscope/tls.crt https://localhost:18080/health >/dev/null
+curl --fail --silent --cacert /tmp/netscope-ca.crt https://localhost:18080/health >/dev/null
 PYTHONPATH="$root" python tests/live_http.py
-[[ "$(curl --silent --cacert /etc/netscope/tls.crt -o /dev/null -w '%{http_code}' -H 'Host: attacker.invalid' https://localhost:18080/health)" == 400 ]]
+[[ "$(curl --silent --cacert /tmp/netscope-ca.crt -o /dev/null -w '%{http_code}' -H 'Host: attacker.invalid' https://localhost:18080/health)" == 400 ]]
 sudo netscope-agent-token add integration-node >/tmp/netscope-enrollment
 python - <<'PY'
 import json, ssl, urllib.request
 from pathlib import Path
 token=Path('/tmp/netscope-enrollment').read_text().split('Token (shown once): ')[1].strip()
 body=json.dumps({'agent_id':'integration-node','data':{'hostname':'test-node','interfaces':[]}}).encode()
-context=ssl.create_default_context(cafile='/etc/netscope/tls.crt')
+context=ssl.create_default_context(cafile='/tmp/netscope-ca.crt')
 request=urllib.request.Request('https://localhost:18080/api/agent/report',data=body,headers={'Content-Type':'application/json','X-NetScope-Token':token})
 with urllib.request.urlopen(request,context=context) as response: assert response.status==200
 Path('/tmp/netscope-report.json').write_bytes(body)

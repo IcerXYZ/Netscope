@@ -14,7 +14,7 @@ except urllib.error.URLError:
     pass
 else:
     raise AssertionError('Untrusted test certificate unexpectedly accepted')
-context=ssl.create_default_context(cafile='/etc/netscope/tls.crt')
+context=ssl.create_default_context(cafile='/tmp/netscope-ca.crt')
 cookies=http.cookiejar.CookieJar()
 client=urllib.request.build_opener(urllib.request.HTTPSHandler(context=context),urllib.request.HTTPCookieProcessor(cookies))
 with client.open(base+'/login',timeout=5) as response:
