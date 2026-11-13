@@ -6,4 +6,11 @@ __pycache__
 *.log
 .venv
 venv
+runtime
+tests
+dist
+build
+*.key
+*.pem
+*.env
 

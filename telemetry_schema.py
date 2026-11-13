@@ -53,3 +53,18 @@ def validate(data):
     if not isinstance(data.get('hostname'), str) or not data['hostname']:
         raise ValueError('Hostname required')
     return data
+
+
+def sanitize_local(value, key=''):
+    """Bound OS-provided strings/counts to the same contract used for agents."""
+    if isinstance(value, dict):
+        return {k: sanitize_local(v, k) for k, v in value.items()}
+    if isinstance(value, list):
+        limit=ARRAYS[key][0] if key in ARRAYS else 16
+        return [sanitize_local(v) for v in value[:limit]]
+    if isinstance(value, str):
+        return ''.join(c if ord(c)>=32 else ' ' for c in value)[:256]
+    if type(value) in (int,float):
+        if not math.isfinite(value): return 0
+        return max(0,min(value,100 if key.endswith('_percent') else 2**64))
+    return value

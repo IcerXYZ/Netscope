@@ -5,7 +5,7 @@ from werkzeug.security import check_password_hash
 from datetime import timedelta
 import os, platform, psutil, socket, time, json, threading, urllib.request, hmac, subprocess, re, collections
 from security import Settings, Limiter, Sessions, secure_opener, token_matches
-from telemetry_schema import validate as validate_telemetry
+from telemetry_schema import validate as validate_telemetry, sanitize_local
 import secrets
 settings = Settings()
 app=Flask(__name__)
@@ -119,7 +119,7 @@ def notify_discord(key,message,cooldown=900):
         try:
             body=json.dumps({"username":"NetScope","content":message[:1900]}).encode()
             req=urllib.request.Request(hook,data=body,headers={"Content-Type":"application/json"},method="POST")
-            outbound.open(req,timeout=4).read(64)
+            with outbound.open(req,timeout=4) as response: response.read(64)
         except Exception as exc:app.logger.warning("Discord webhook failed")
     threading.Thread(target=send,daemon=True).start()
 
@@ -209,7 +209,7 @@ def collect_local_status():
     data={"timestamp":int(time.time()),"hostname":socket.gethostname(),"fqdn":socket.getfqdn(),"primary_ip":next((i["ipv4"] for i in interfaces if i["ipv4"] and i["name"]!="lo"),""),"os":platform.platform(),"kernel":platform.release(),"cpu_percent":psutil.cpu_percent(interval=None),"cpu_count":psutil.cpu_count(logical=True) or 0,"cpu_physical":psutil.cpu_count(logical=False) or 0,"cpu_frequency_mhz":freq.current if freq else 0,"load_1":load[0],"load_5":load[1],"load_15":load[2],"memory_percent":mem.percent,"memory_used":mem.used,"memory_total":mem.total,"memory_available":mem.available,"swap_percent":swap.percent,"swap_used":swap.used,"swap_total":swap.total,"disk_percent":disk.percent,"disk_used":disk.used,"disk_total":disk.total,"disk_free":disk.free,"uptime":int(time.time()-psutil.boot_time()),"interfaces":interfaces,"processes":sorted(processes,key=lambda x:x["memory_percent"],reverse=True)[:8],"network_intel":get_network_intelligence()}
     for metric,value in (("CPU",data["cpu_percent"]),("RAM",data["memory_percent"]),("Disk",data["disk_percent"])):
         if value>=90:notify_discord(socket.gethostname()+":"+metric,f"⚠️ **NetScope alert — {socket.gethostname()}**\n{metric} usage is {value:.1f}% (90% threshold).")
-    return data
+    return sanitize_local(data)
 
 def get_local_status():
     global _status_cache, _status_cache_time

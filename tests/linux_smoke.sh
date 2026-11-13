@@ -23,6 +23,7 @@ sudo bash install.sh --yes
 pid_after="$(systemctl show netscope -p MainPID --value)"
 [[ "$pid_before" != "$pid_after" ]]
 curl --fail --silent --cacert /etc/netscope/tls.crt https://localhost:18080/health >/dev/null
+PYTHONPATH="$root" python tests/live_http.py
 [[ "$(curl --silent --cacert /etc/netscope/tls.crt -o /dev/null -w '%{http_code}' -H 'Host: attacker.invalid' https://localhost:18080/health)" == 400 ]]
 sudo netscope-agent-token add integration-node >/tmp/netscope-enrollment
 python - <<'PY'

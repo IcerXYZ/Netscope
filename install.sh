@@ -39,6 +39,8 @@ find "$release/static" "$release/templates" -type d -exec chmod 0750 {} +
 find "$release/static" "$release/templates" -type f -exec chmod 0640 {} +
 python3 -m venv "$release/venv"
 "$release/venv/bin/pip" install --disable-pip-version-check -q --require-hashes -r "$release/requirements.lock"
+chown -R root:netscope "$release"
+chmod -R u=rwX,g=rX,o= "$release"
 pending="$(mktemp /etc/.netscope-env-XXXXXXXX)"
 backup="$(mktemp -d /opt/netscope-releases/rollback-XXXXXXXX)"
 had_env=0; had_unit=0; switched=0; old_target=""; legacy=""

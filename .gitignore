@@ -1,0 +1,11 @@
+.env
+runtime/
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.key
+*.pem
+*.env
+dist/
+build/
