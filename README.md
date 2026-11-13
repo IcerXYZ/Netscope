@@ -118,7 +118,7 @@ Choose **This machine** to view the central server's own detailed telemetry. Cho
 
 ## Discord alerts
 
-The installer keeps an existing Discord webhook in \`/etc/netscope-pro.env\`. To configure one manually:
+The installer keeps an existing Discord webhook in \`/etc/netscope.env\`. To configure one manually:
 
 \`\`\`ini
 NETSCOPE_DISCORD_WEBHOOK=https://discord.com/api/webhooks/REPLACE_ME
@@ -127,7 +127,7 @@ NETSCOPE_DISCORD_WEBHOOK=https://discord.com/api/webhooks/REPLACE_ME
 Restart the service after changing the file:
 
 \`\`\`bash
-sudo systemctl restart netscope-pro
+sudo systemctl restart netscope
 \`\`\`
 
 Alerts are rate-limited. CPU, RAM or disk at 90% triggers a resource alert. Central servers can also notify when an agent stops reporting.
@@ -137,9 +137,9 @@ Alerts are rate-limited. CPU, RAM or disk at 90% triggers a resource alert. Cent
 ## Useful commands
 
 \`\`\`bash
-sudo systemctl status netscope-pro
-sudo journalctl -u netscope-pro -f
-sudo systemctl restart netscope-pro
+sudo systemctl status netscope
+sudo journalctl -u netscope -f
+sudo systemctl restart netscope
 \`\`\`
 
 Update an existing installation:
@@ -161,7 +161,7 @@ sudo bash uninstall.sh
 
 ## Configuration
 
-Private settings are stored in \`/etc/netscope-pro.env\` with root-only permissions.
+Private settings are stored in \`/etc/netscope.env\` with root-only permissions.
 
 - \`NETSCOPE_ROLE=single|server|agent\`
 - \`NETSCOPE_AGENT_TOKEN\` shared by the central server and its agents
@@ -179,7 +179,7 @@ sudo tail -n 80 /var/log/netscope-install.log
 Service logs:
 
 \`\`\`bash
-sudo journalctl -u netscope-pro -n 100 --no-pager
+sudo journalctl -u netscope -n 100 --no-pager
 \`\`\`
 
 If an agent does not appear, verify the central server URL and token, then from the agent check that the central dashboard responds:
