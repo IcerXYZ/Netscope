@@ -1,18 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-APP_DIR="/opt/netscope-pro"
-SERVICE_USER="netscope"
-SERVICE_FILE="/etc/systemd/system/netscope-pro.service"
-BANNER_FILE="/etc/profile.d/netscope-banner.sh"
-ENV_FILE="/etc/netscope-pro.env"
-SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PORT="${NETSCOPE_PORT:-8080}"
-HOST="${NETSCOPE_HOST:-0.0.0.0}"
-ASSUME_YES=0
+APP_DIR="/opt/netscope-pro"; SERVICE_USER="netscope"; SERVICE_FILE="/etc/systemd/system/netscope-pro.service"
+BANNER_FILE="/etc/profile.d/netscope-banner.sh"; ENV_FILE="/etc/netscope-pro.env"; LOG_FILE="/var/log/netscope-install.log"
+SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"; PORT=8080; HOST=0.0.0.0; ROLE=single; ASSUME_YES=0
 logo() {
-  clear 2>/dev/null || true
-  printf '\033[38;5;208m'
-  cat <<'LOGO'
+ clear 2>/dev/null || true; printf '\033[38;5;208m'
+ cat <<'LOGO'
  _   _ _____ _____ ____   ____ ___  ____  _____
 | \ | | ____|_   _/ ___| / ___/ _ \|  _ \| ____|
 |  \| |  _|   | | \___ \| |  | | | | |_) |  _|
@@ -20,63 +13,87 @@ logo() {
 |_| \_|_____| |_| |____/ \____\___/|_|   |_____|
                          P R O
 LOGO
-  printf '\033[0m'
-  echo "                 VM INSTALLATION WIZARD"
-  echo "  --------------------------------------------------"
+ printf '\033[0m'; echo "             NETWORK MONITORING SETUP"; echo "  ------------------------------------------------"
 }
-ask() { local prompt="$1" default="$2" answer; read -r -p "$prompt [$default]: " answer || true; printf '%s' "${answer:-$default}"; }
+ask() { local p="$1" d="$2" a; read -r -p "$p [$d]: " a || true; if [[ -n "$a" ]]; then printf '%s' "$a"; else printf '%s' "$d"; fi; }
+set_env() {
+ local key="$1" value="$2" tmp; tmp="$(mktemp)"
+ if [[ -f "$ENV_FILE" ]]; then grep -v "^$key=" "$ENV_FILE" > "$tmp" || true; fi
+ printf '%s=%s\n' "$key" "$value" >> "$tmp"; install -m 0600 "$tmp" "$ENV_FILE"; rm -f "$tmp"
+}
+run_step() {
+ local label="$1"; shift; local i=0 pid rc frame
+ "$@" >>"$LOG_FILE" 2>&1 & pid=$!
+ while kill -0 "$pid" 2>/dev/null; do
+  case "$i" in 0) frame='▖';; 1) frame='▘';; 2) frame='▝';; *) frame='▗';; esac
+  printf '\r  \033[38;5;208m%s\033[0m %s' "$label" "$frame"; i=$(((i+1)%4)); sleep 0.12
+ done
+ if wait "$pid"; then printf '\r  \033[38;5;82m✓\033[0m %s\n' "$label"
+ else rc=$?; printf '\r  \033[38;5;196m✗\033[0m %s\n' "$label"; echo "Details: $LOG_FILE"; tail -n 18 "$LOG_FILE" || true; return "$rc"; fi
+}
 for arg in "$@"; do case "$arg" in --yes|-y) ASSUME_YES=1;; --help|-h) echo "Usage: sudo bash install.sh [--yes]"; exit 0;; *) echo "Unknown option: $arg"; exit 2;; esac; done
 if [[ $EUID -ne 0 ]]; then echo "Run with sudo: sudo bash install.sh"; exit 1; fi
-if [[ ! -f "$SOURCE_DIR/app.py" || ! -f "$SOURCE_DIR/requirements.txt" || ! -d "$SOURCE_DIR/templates" || ! -d "$SOURCE_DIR/static" ]]; then echo "Installer files are incomplete. Pull the latest NetScope repository and retry."; exit 1; fi
+if [[ ! -f "$SOURCE_DIR/app.py" || ! -f "$SOURCE_DIR/requirements.txt" || ! -d "$SOURCE_DIR/templates" || ! -d "$SOURCE_DIR/static" ]]; then echo "Installer files are incomplete. Pull the latest repository and retry."; exit 1; fi
 . /etc/os-release
-case "${ID:-}" in debian|ubuntu) ;; *) echo "Supported: Debian/Ubuntu. Detected: ${PRETTY_NAME:-unknown}"; exit 1;; esac
-logo
-echo "This wizard installs NetScope Pro as a background service."
-echo "It will not change IP addresses, routes, firewall rules or Proxmox bridges."
+case "$ID" in debian|ubuntu) ;; *) echo "Supported: Debian/Ubuntu. Detected: $PRETTY_NAME"; exit 1;; esac
 if [[ ! -f "$ENV_FILE" ]]; then install -m 0600 /dev/null "$ENV_FILE"; fi
+logo
+echo "How should this machine be used?"
+echo "  1) Single host      Monitor only this machine"
+echo "  2) Central server   Collect data from all agents"
+echo "  3) Monitoring agent Send this machine's data to the central server"
 if [[ "$ASSUME_YES" -eq 0 ]]; then
-  echo "Optional Discord webhook. Leave blank to keep the current setting."
-  read -r -s -p "Discord webhook URL: " DISCORD_HOOK || true; echo
-  if [[ -n "${DISCORD_HOOK:-}" ]]; then
-    grep -v "^NETSCOPE_DISCORD_WEBHOOK=" "$ENV_FILE" > "$ENV_FILE.tmp" || true
-    printf "NETSCOPE_DISCORD_WEBHOOK=%s\n" "$DISCORD_HOOK" >> "$ENV_FILE.tmp"
-    mv "$ENV_FILE.tmp" "$ENV_FILE"; chmod 0600 "$ENV_FILE"; unset DISCORD_HOOK
-  fi
+ read -r -p "Choose 1, 2 or 3 [1]: " choice || true; if [[ -z "$choice" ]]; then choice=1; fi
+ case "$choice" in 1) ROLE=single;; 2) ROLE=server;; 3) ROLE=agent;; *) echo "Invalid choice."; exit 1;; esac
+else
+ if [[ -n "$(printenv NETSCOPE_ROLE 2>/dev/null || true)" ]]; then ROLE="$(printenv NETSCOPE_ROLE)"; fi
 fi
+if [[ "$ROLE" == agent ]]; then
+ HOST=127.0.0.1
+ if [[ "$ASSUME_YES" -eq 0 ]]; then
+  SERVER_URL="$(ask 'Central dashboard URL' 'http://192.168.6.20:8080')"
+  read -r -s -p "Central server enrollment token: " AGENT_TOKEN || true; echo
+ else
+  SERVER_URL="$(printenv NETSCOPE_SERVER_URL 2>/dev/null || true)"; AGENT_TOKEN="$(printenv NETSCOPE_AGENT_TOKEN 2>/dev/null || true)"
+ fi
+ [[ "$SERVER_URL" =~ ^https?:// ]] || { echo "Enter a valid central server URL."; exit 1; }
+ [[ -n "$AGENT_TOKEN" ]] || { echo "An enrollment token is required."; exit 1; }
+ set_env NETSCOPE_SERVER_URL "$SERVER_URL"; set_env NETSCOPE_AGENT_TOKEN "$AGENT_TOKEN"; unset AGENT_TOKEN
+else
+ if [[ "$ASSUME_YES" -eq 0 ]]; then
+  PORT="$(ask 'Dashboard TCP port' "$PORT")"; [[ "$PORT" =~ ^[0-9]+$ ]] && ((PORT>=1 && PORT<=65535)) || { echo "Invalid TCP port."; exit 1; }
+  HOST="$(ask 'Listen address (0.0.0.0 = LAN access)' "$HOST")"
+ fi
+ if [[ "$ROLE" == server ]]; then
+  TOKEN="$(grep -m1 '^NETSCOPE_AGENT_TOKEN=' "$ENV_FILE" | cut -d= -f2- || true)"
+  if [[ -z "$TOKEN" ]]; then TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(36))')"; fi
+  set_env NETSCOPE_AGENT_TOKEN "$TOKEN"; echo
+  echo "CENTRAL SERVER TOKEN — copy this into each agent installation:"
+  printf '\033[38;5;208m%s\033[0m\n' "$TOKEN"; echo "Keep it private. Existing tokens are kept on updates."
+ fi
+fi
+set_env NETSCOPE_ROLE "$ROLE"; set_env NETSCOPE_PORT "$PORT"; set_env NETSCOPE_HOST "$HOST"
 if [[ "$ASSUME_YES" -eq 0 ]]; then
-  PORT="$(ask 'Dashboard TCP port' "$PORT")"
-  [[ "$PORT" =~ ^[0-9]+$ ]] && ((PORT>=1 && PORT<=65535)) || { echo "Invalid TCP port."; exit 1; }
-  HOST="$(ask 'Listen address (0.0.0.0 = all VM interfaces)' "$HOST")"
-  echo
-  echo "INSTALLATION SUMMARY"
-  echo " OS       : ${PRETTY_NAME:-$ID}"
-  echo " URL      : http://<VM-IP>:$PORT"
-  echo " Listen   : $HOST"
-  echo " Path     : $APP_DIR"
-  echo " Service  : netscope-pro"
-  read -r -p "Continue with installation? [Y/n]: " confirm || true
-  case "${confirm:-Y}" in [Yy]|[Yy][Ee][Ss]) ;; *) echo "Cancelled."; exit 0;; esac
+ echo; echo "READY TO INSTALL"; echo "  Machine role : $ROLE"
+ if [[ "$ROLE" == agent ]]; then echo "  Central URL  : $SERVER_URL"; else echo "  Dashboard    : http://<machine-IP>:$PORT"; fi
+ echo "  Discord      : existing webhook will be preserved"
+ read -r -p "Continue? [Y/n]: " confirm || true; if [[ -z "$confirm" ]]; then confirm=Y; fi
+ case "$confirm" in [Yy]|[Yy][Ee][Ss]) ;; *) echo "Cancelled."; exit 0;; esac
 fi
-step(){ printf '\n\033[38;5;208m[%s/6]\033[0m %s\n' "$1" "$2"; }
-step 1 "Installing system dependencies"
-export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y python3 python3-venv python3-pip ca-certificates
-step 2 "Creating restricted service account"
-id "$SERVICE_USER" >/dev/null 2>&1 || useradd --system --home-dir "$APP_DIR" --create-home --shell /usr/sbin/nologin "$SERVICE_USER"
-step 3 "Installing dashboard and Python dependencies"
+: > "$LOG_FILE"; export DEBIAN_FRONTEND=noninteractive; echo; echo "Installing NetScope Pro"
+run_step "Updating package lists" apt-get update -qq
+run_step "Installing Python requirements" apt-get install -y -qq python3 python3-venv python3-pip ca-certificates
+run_step "Creating service account" bash -c "id $SERVICE_USER >/dev/null 2>&1 || useradd --system --home-dir $APP_DIR --create-home --shell /usr/sbin/nologin $SERVICE_USER"
 install -d -o root -g "$SERVICE_USER" -m 0750 "$APP_DIR" "$APP_DIR/templates" "$APP_DIR/static"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/app.py" "$SOURCE_DIR/requirements.txt" "$APP_DIR/"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/templates/index.html" "$APP_DIR/templates/index.html"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/static/app.css" "$APP_DIR/static/app.css"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/static/app.js" "$APP_DIR/static/app.js"
-python3 -m venv "$APP_DIR/venv"
-"$APP_DIR/venv/bin/pip" install --upgrade pip
-"$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
-step 4 "Creating systemd service"
+run_step "Preparing Python environment" python3 -m venv "$APP_DIR/venv"
+run_step "Installing dashboard libraries" "$APP_DIR/venv/bin/pip" install --disable-pip-version-check -q -r "$APP_DIR/requirements.txt"
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=NetScope Pro monitoring dashboard
+Description=NetScope Pro monitoring service
 After=network-online.target
 Wants=network-online.target
 [Service]
@@ -84,10 +101,8 @@ Type=simple
 User=$SERVICE_USER
 Group=$SERVICE_USER
 WorkingDirectory=$APP_DIR
-Environment=NETSCOPE_HOST=$HOST
-Environment=NETSCOPE_PORT=$PORT
 EnvironmentFile=-$ENV_FILE
-ExecStart=$APP_DIR/venv/bin/gunicorn --workers 2 --bind $HOST:$PORT app:app
+ExecStart=$APP_DIR/venv/bin/gunicorn --workers 1 --bind $HOST:$PORT app:app
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
@@ -96,7 +111,6 @@ ProtectHome=true
 [Install]
 WantedBy=multi-user.target
 EOF
-step 5 "Installing standard NetScope shell login logo"
 cat > "$BANNER_FILE" <<'BANNER'
 #!/bin/sh
 [ -t 1 ] || return 0 2>/dev/null || exit 0
@@ -105,7 +119,7 @@ cat <<'NETSCOPE'
  _   _ _____ _____ ____   ____ ___  ____  _____
 | \ | | ____|_   _/ ___| / ___/ _ \|  _ \| ____|
 |  \| |  _|   | | \___ \| |  | | | | |_) |  _|
-| |\  | |___  | |  ___) | |__| |_| |  __/| |___
+| |\  | |___  | |  ___) | |__| |_| |  __/| |___|
 |_| \_|_____| |_| |____/ \____\___/|_|   |_____|
                          P R O
 NETSCOPE
@@ -113,18 +127,17 @@ printf '\033[0m'
 printf ' NetScope Pro monitoring node · %s\n\n' "$(hostname)"
 BANNER
 chmod 0644 "$BANNER_FILE"
-step 6 "Starting service and checking health"
-systemctl daemon-reload
-systemctl enable --now netscope-pro.service
-sleep 2
-if ! systemctl is-active --quiet netscope-pro.service; then systemctl --no-pager --full status netscope-pro.service || true; echo "Install failed. Logs: journalctl -u netscope-pro -n 80"; exit 1; fi
+run_step "Reloading system service manager" systemctl daemon-reload
+run_step "Starting NetScope in the background" systemctl enable --now netscope-pro.service
+sleep 1
+if ! systemctl is-active --quiet netscope-pro.service; then systemctl --no-pager --full status netscope-pro.service || true; echo "Service failed. Check: journalctl -u netscope-pro -n 80"; exit 1; fi
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
-echo
-printf '\033[38;5;82m INSTALLATION COMPLETE\033[0m\n'
-echo "Dashboard : http://${IP:-VM-IP}:$PORT"
-echo "Service   : systemctl status netscope-pro"
-echo "Logs      : journalctl -u netscope-pro -f"
-echo "Config    : $ENV_FILE (Discord webhook + cluster nodes)"
-echo "Login logo: shown on new interactive shell logins"
-echo
-echo "Security: no built-in login is configured. Restrict port $PORT to trusted LAN/VPN."
+echo; printf '\033[38;5;82m SETUP COMPLETE\033[0m\n'
+if [[ "$ROLE" == agent ]]; then
+ echo "Role      : Monitoring agent"; echo "Central   : $SERVER_URL"; echo "Status    : Sending reports every 5 seconds"; echo "Local bind: 127.0.0.1 (not exposed to LAN)"
+else
+ echo "Role      : $ROLE"; echo "Dashboard : http://$IP:$PORT"
+fi
+echo "Service   : systemctl status netscope-pro"; echo "Logs      : journalctl -u netscope-pro -f"
+echo "Config    : $ENV_FILE (Discord webhook and agent settings)"; echo "Install log: $LOG_FILE"
+echo "Security  : keep dashboard access on your trusted LAN/VPN."
