@@ -91,6 +91,8 @@ fi
 run_step "Updating package lists" apt-get update -qq
 run_step "Installing Python requirements" apt-get install -y -qq python3 python3-venv python3-pip ca-certificates
 run_step "Creating service account" bash -c "id $SERVICE_USER >/dev/null 2>&1 || useradd --system --home-dir $APP_DIR --create-home --shell /usr/sbin/nologin $SERVICE_USER"
+# Permit read-only access to system authentication logs where the distro exposes them via adm/journal.
+if getent group systemd-journal >/dev/null 2>&1; then usermod -aG adm,systemd-journal "$SERVICE_USER"; else usermod -aG adm "$SERVICE_USER"; fi
 install -d -o root -g "$SERVICE_USER" -m 0750 "$APP_DIR" "$APP_DIR/templates" "$APP_DIR/static"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/app.py" "$SOURCE_DIR/requirements.txt" "$APP_DIR/"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/templates/index.html" "$APP_DIR/templates/index.html"
