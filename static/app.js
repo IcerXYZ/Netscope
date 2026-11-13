@@ -1,3 +1,5 @@
+// Redirect to login if an authenticated API session expires.
+(function(){const nativeFetch=window.fetch.bind(window);window.fetch=async function(...args){const response=await nativeFetch(...args);if(response.status===401&&String(args[0]||"").startsWith("/api/"))window.location.replace("/login");return response;};})();
 "use strict";
 const $=id=>document.getElementById(id);let mode="single",currentPage="overview",latest=null,intel={},refreshBusy=false,refreshTimer=null,toastTimer=null;const historyRx=[],historyTx=[];
 const fmt=n=>{if(!Number.isFinite(Number(n)))return"—";n=Number(n);const u=["B","KB","MB","GB","TB"];let i=0;while(n>=1024&&i<4){n/=1024;i++}return(i?n.toFixed(1):Math.round(n))+" "+u[i]},rate=n=>fmt(n)+"/s",duration=s=>{s=Math.max(0,Number(s)||0);let d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return(d?d+"d ":"")+h+"h "+m+"m"};

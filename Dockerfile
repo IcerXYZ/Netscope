@@ -6,6 +6,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
+COPY agent_tokens.py /usr/local/bin/netscope-agent-token
+RUN sed -i '1c#!/usr/local/bin/python' /usr/local/bin/netscope-agent-token && chmod 0750 /usr/local/bin/netscope-agent-token
 COPY templates ./templates
 COPY static ./static
 EXPOSE 8080

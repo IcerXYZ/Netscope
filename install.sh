@@ -2,7 +2,8 @@
 set -Eeuo pipefail
 APP_DIR="/opt/netscope"; SERVICE_USER="netscope"; SERVICE_FILE="/etc/systemd/system/netscope.service"
 BANNER_FILE="/etc/profile.d/netscope-banner.sh"; ENV_FILE="/etc/netscope.env"; LOG_FILE="/var/log/netscope-install.log"
-SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"; PORT=8080; HOST=0.0.0.0; ROLE=single; ASSUME_YES=0; USE_UFW=0
+SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"; PORT=8080; HOST=127.0.0.1; ROLE=single; ASSUME_YES=0; USE_UFW=0
+ACCESS_MODE=localhost; LAN_CIDR=""; AUTH_ENABLED=false; AUTH_USERNAME=""; AUTH_PASSWORD=""
 logo() {
  clear 2>/dev/null || true; printf '\033[38;5;208m'
  cat <<'LOGO'
@@ -53,36 +54,83 @@ else
 fi
 if [[ "$ROLE" == agent ]]; then
  HOST=127.0.0.1
+ ACCESS_MODE=localhost
+ LAN_CIDR="$(python3 - <<'PY'
+import ipaddress, subprocess
+try:
+ for line in subprocess.check_output(["ip","-o","-f","inet","addr","show","scope","global"],text=True).splitlines():
+  candidate=line.split()[3]; iface=ipaddress.ip_interface(candidate)
+  if iface.ip.is_private and not iface.ip.is_loopback: print(candidate); break
+except Exception: pass
+PY
+)"
  if [[ "$ASSUME_YES" -eq 0 ]]; then
   SERVER_URL="$(ask 'Central dashboard URL' 'http://192.168.6.20:8080')"
-  read -r -s -p "Central server enrollment token: " AGENT_TOKEN || true; echo
+  AGENT_ID="$(ask 'Unique agent ID (e.g. proxmox-node-01)' "$(hostname -s)")"
+  read -r -s -p "Unique agent token created on the central server: " AGENT_TOKEN || true; echo
  else
-  SERVER_URL="$(printenv NETSCOPE_SERVER_URL 2>/dev/null || true)"; AGENT_TOKEN="$(printenv NETSCOPE_AGENT_TOKEN 2>/dev/null || true)"
+  SERVER_URL="$(printenv NETSCOPE_SERVER_URL 2>/dev/null || true)"; AGENT_TOKEN="$(printenv NETSCOPE_AGENT_TOKEN 2>/dev/null || true)"; AGENT_ID="$(printenv NETSCOPE_AGENT_ID 2>/dev/null || hostname -s)"
  fi
  [[ "$SERVER_URL" =~ ^https?:// ]] || { echo "Enter a valid central server URL."; exit 1; }
  [[ -n "$AGENT_TOKEN" ]] || { echo "An enrollment token is required."; exit 1; }
- set_env NETSCOPE_SERVER_URL "$SERVER_URL"; set_env NETSCOPE_AGENT_TOKEN "$AGENT_TOKEN"; unset AGENT_TOKEN
+ [[ "$AGENT_ID" =~ ^[A-Za-z0-9_.-]{1,64}$ ]] || { echo "Invalid agent ID."; exit 1; }
+ set_env NETSCOPE_SERVER_URL "$SERVER_URL"; set_env NETSCOPE_AGENT_TOKEN "$AGENT_TOKEN"; set_env NETSCOPE_AGENT_ID "$AGENT_ID"; unset AGENT_TOKEN
 else
  if [[ "$ASSUME_YES" -eq 0 ]]; then
   PORT="$(ask 'Dashboard TCP port' "$PORT")"; [[ "$PORT" =~ ^[0-9]+$ ]] && ((PORT>=1 && PORT<=65535)) || { echo "Invalid TCP port."; exit 1; }
-  HOST="$(ask 'Listen address (0.0.0.0 = LAN access)' "$HOST")"
+  LAN_CIDR="$(python3 - <<'PY'
+import ipaddress, subprocess
+try:
+ for line in subprocess.check_output(["ip","-o","-f","inet","addr","show","scope","global"],text=True).splitlines():
+  candidate=line.split()[3]
+  iface=ipaddress.ip_interface(candidate)
+  if iface.ip.is_private and not iface.ip.is_loopback:
+   print(candidate); break
+except Exception: pass
+PY
+)"
+  if [[ -n "$LAN_CIDR" ]]; then
+   LAN_IP="${LAN_CIDR%/*}"
+   echo "Detected private LAN address: $LAN_IP"
+   echo "  1) LAN only (other devices on this private subnet)"
+   echo "  2) Localhost only (this machine)"
+   access_choice="$(ask 'Choose access mode' '1')"
+   if [[ "$access_choice" == "1" ]]; then HOST="$LAN_IP"; ACCESS_MODE=lan; else HOST=127.0.0.1; ACCESS_MODE=localhost; fi
+  else
+   echo "No private LAN IPv4 address detected; using localhost only."
+   HOST=127.0.0.1; ACCESS_MODE=localhost
+  fi
+  auth_choice="$(ask 'Enable dashboard username/password login? (recommended)' 'Y')"
+  case "$auth_choice" in [Nn]|[Nn][Oo]) AUTH_ENABLED=false;; *) AUTH_ENABLED=true;; esac
+  if [[ "$AUTH_ENABLED" == true ]]; then
+   AUTH_USERNAME="$(ask 'Dashboard username' 'admin')"
+   [[ "$AUTH_USERNAME" =~ ^[A-Za-z0-9_.-]{1,64}$ ]] || { echo "Invalid username."; exit 1; }
+   read -r -s -p "Dashboard password (minimum 12 characters): " AUTH_PASSWORD || true; echo
+   [[ ${#AUTH_PASSWORD} -ge 12 ]] || { echo "Password must be at least 12 characters."; exit 1; }
+   read -r -s -p "Confirm dashboard password: " AUTH_CONFIRM || true; echo
+   [[ "$AUTH_PASSWORD" == "$AUTH_CONFIRM" ]] || { echo "Passwords do not match."; exit 1; }
+   unset AUTH_CONFIRM
+  fi
  fi
  if [[ "$ROLE" == server ]]; then
-  TOKEN="$(grep -m1 '^NETSCOPE_AGENT_TOKEN=' "$ENV_FILE" | cut -d= -f2- || true)"
-  if [[ -z "$TOKEN" ]]; then TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(36))')"; fi
-  set_env NETSCOPE_AGENT_TOKEN "$TOKEN"; echo
-  echo "CENTRAL SERVER TOKEN — copy this into each agent installation:"
-  printf '\033[38;5;208m%s\033[0m\n' "$TOKEN"; echo "Keep it private. Existing tokens are kept on updates."
+  echo "Central server will use individual per-agent credentials."
+  echo "After installation, create one with: netscope-agent-token add <agent-id>"
+  set_env NETSCOPE_AGENT_TOKEN ""
+  if [[ ! -f /etc/netscope-agent-tokens.json ]]; then install -o root -g "$SERVICE_USER" -m 0640 /dev/null /etc/netscope-agent-tokens.json; else chown root:"$SERVICE_USER" /etc/netscope-agent-tokens.json; chmod 0640 /etc/netscope-agent-tokens.json; fi
  fi
 fi
-set_env NETSCOPE_ROLE "$ROLE"; set_env NETSCOPE_PORT "$PORT"; set_env NETSCOPE_HOST "$HOST"
+set_env NETSCOPE_ROLE "$ROLE"; set_env NETSCOPE_PORT "$PORT"; set_env NETSCOPE_HOST "$HOST"; set_env NETSCOPE_BIND "$HOST"; set_env NETSCOPE_AUTH_ENABLED "$AUTH_ENABLED"
+if [[ "$AUTH_ENABLED" == true ]]; then
+ set_env NETSCOPE_AUTH_USERNAME "$AUTH_USERNAME"
+fi
+if [[ "$ROLE" == server ]]; then set_env NETSCOPE_AGENT_TOKENS_FILE "/etc/netscope-agent-tokens.json"; fi
 if [[ "$ASSUME_YES" -eq 0 ]]; then
  read -r -p "Would you like NetScope to configure UFW firewall rules? [y/N]: " ufw_answer || true
  case "$ufw_answer" in [Yy]|[Yy][Ee][Ss]) USE_UFW=1;; *) USE_UFW=0;; esac
 fi
 if [[ "$ASSUME_YES" -eq 0 ]]; then
  echo; echo "READY TO INSTALL"; echo "  Machine role : $ROLE"
- if [[ "$ROLE" == agent ]]; then echo "  Central URL  : $SERVER_URL"; else echo "  Dashboard    : http://<machine-IP>:$PORT"; fi
+ if [[ "$ROLE" == agent ]]; then echo "  Central URL  : $SERVER_URL"; else echo "  Dashboard    : http://$HOST:$PORT ($ACCESS_MODE)"; echo "  Login        : $AUTH_ENABLED"; fi
  echo "  Discord      : existing webhook will be preserved"
  read -r -p "Continue? [Y/n]: " confirm || true; if [[ -z "$confirm" ]]; then confirm=Y; fi
  case "$confirm" in [Yy]|[Yy][Ee][Ss]) ;; *) echo "Cancelled."; exit 0;; esac
@@ -96,10 +144,18 @@ if getent group systemd-journal >/dev/null 2>&1; then usermod -aG adm,systemd-jo
 install -d -o root -g "$SERVICE_USER" -m 0750 "$APP_DIR" "$APP_DIR/templates" "$APP_DIR/static"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/app.py" "$SOURCE_DIR/requirements.txt" "$APP_DIR/"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/templates/index.html" "$APP_DIR/templates/index.html"
+install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/templates/login.html" "$APP_DIR/templates/login.html"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/static/app.css" "$APP_DIR/static/app.css"
+install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/static/login.css" "$APP_DIR/static/login.css"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/static/app.js" "$APP_DIR/static/app.js"
 run_step "Preparing Python environment" python3 -m venv "$APP_DIR/venv"
 run_step "Installing dashboard libraries" "$APP_DIR/venv/bin/pip" install --disable-pip-version-check -q -r "$APP_DIR/requirements.txt"
+if [[ "$AUTH_ENABLED" == true ]]; then
+ HASH="$(printf '%s' "$AUTH_PASSWORD" | "$APP_DIR/venv/bin/python" -c 'import sys; from werkzeug.security import generate_password_hash; print(generate_password_hash(sys.stdin.read(), method="scrypt"))')"
+ set_env NETSCOPE_AUTH_PASSWORD_HASH "$HASH"
+ unset AUTH_PASSWORD HASH
+fi
+if ! grep -q '^NETSCOPE_SECRET_KEY=' "$ENV_FILE"; then set_env NETSCOPE_SECRET_KEY "$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"; fi
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=NetScope monitoring service
@@ -180,11 +236,20 @@ fi
 run_step "Reloading system service manager" systemctl daemon-reload
 if [[ "$USE_UFW" -eq 1 ]]; then
  run_step "Installing UFW firewall" apt-get install -y -qq ufw
- run_step "Allowing SSH on TCP 22" ufw allow 22/tcp
- run_step "Allowing HTTP on TCP 80" ufw allow 80/tcp
- run_step "Allowing NetScope port TCP $PORT" ufw allow "$PORT/tcp"
- run_step "Enabling UFW firewall" ufw --force enable
- echo "UFW enabled: allowed TCP ports 22, 80 and $PORT."
+ # Remove a previous broad NetScope port rule before adding a subnet-scoped rule.
+ ufw --force delete allow "$PORT/tcp" >/dev/null 2>&1 || true
+ if [[ -z "$LAN_CIDR" ]]; then
+  echo "UFW was not enabled: no private LAN subnet was detected. Configure firewall rules manually to avoid locking yourself out."
+ else
+  run_step "Allowing SSH from private LAN $LAN_CIDR" ufw allow from "$LAN_CIDR" to any port 22 proto tcp
+  if [[ "$ACCESS_MODE" == lan ]]; then
+   run_step "Allowing NetScope from private LAN $LAN_CIDR" ufw allow from "$LAN_CIDR" to any port "$PORT" proto tcp
+  else
+   echo "Localhost mode: no NetScope inbound firewall rule added."
+  fi
+  run_step "Enabling UFW firewall" ufw --force enable
+  echo "UFW enabled with private-subnet-only access rules."
+ fi
 else
  echo "UFW setup skipped; existing firewall settings were left unchanged."
 fi
@@ -196,7 +261,9 @@ echo; printf '\033[38;5;82m SETUP COMPLETE\033[0m\n'
 if [[ "$ROLE" == agent ]]; then
  echo "Role      : Monitoring agent"; echo "Central   : $SERVER_URL"; echo "Status    : Sending reports every 5 seconds"; echo "Local bind: 127.0.0.1 (not exposed to LAN)"
 else
- echo "Role      : $ROLE"; echo "Dashboard : http://$IP:$PORT"
+ echo "Role      : $ROLE"; echo "Dashboard : http://$HOST:$PORT"
+ echo "Access    : $ACCESS_MODE"
+ if [[ "$ROLE" == server ]]; then echo "Agent tokens: netscope-agent-token add <agent-id>"; fi
 fi
 echo "Service   : systemctl status netscope"; echo "Logs      : journalctl -u netscope -f"
 echo "Config    : $ENV_FILE (Discord webhook and agent settings)"; echo "Install log: $LOG_FILE"
