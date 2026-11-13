@@ -236,6 +236,8 @@ fi
 run_step "Reloading system service manager" systemctl daemon-reload
 if [[ "$USE_UFW" -eq 1 ]]; then
  run_step "Installing UFW firewall" apt-get install -y -qq ufw
+ # Remove a previous broad NetScope port rule before adding a subnet-scoped rule.
+ ufw --force delete allow "$PORT/tcp" >/dev/null 2>&1 || true
  if [[ -z "$LAN_CIDR" ]]; then
   echo "UFW was not enabled: no private LAN subnet was detected. Configure firewall rules manually to avoid locking yourself out."
  else
