@@ -106,7 +106,7 @@ PY
  if [[ "$ROLE" == server ]]; then
   echo "Central server will use individual per-agent credentials."
   echo "After installation, create one with: netscope-agent-token add <agent-id>"
-  install -m 0600 /dev/null /etc/netscope-agent-tokens.json
+  if [[ ! -f /etc/netscope-agent-tokens.json ]]; then install -m 0600 /dev/null /etc/netscope-agent-tokens.json; fi
  fi
 fi
 set_env NETSCOPE_ROLE "$ROLE"; set_env NETSCOPE_PORT "$PORT"; set_env NETSCOPE_HOST "$HOST"; set_env NETSCOPE_BIND "$HOST"; set_env NETSCOPE_AUTH_ENABLED "$AUTH_ENABLED"
@@ -139,7 +139,7 @@ install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/static/app.js" "$APP_DIR
 run_step "Preparing Python environment" python3 -m venv "$APP_DIR/venv"
 run_step "Installing dashboard libraries" "$APP_DIR/venv/bin/pip" install --disable-pip-version-check -q -r "$APP_DIR/requirements.txt"
 if [[ "$AUTH_ENABLED" == true ]]; then
- HASH="$("$APP_DIR/venv/bin/python" -c 'import sys; from werkzeug.security import generate_password_hash; print(generate_password_hash(sys.stdin.read(), method="scrypt"))' <<< "$AUTH_PASSWORD")"
+ HASH="$(printf '%s' "$AUTH_PASSWORD" | "$APP_DIR/venv/bin/python" -c 'import sys; from werkzeug.security import generate_password_hash; print(generate_password_hash(sys.stdin.read(), method="scrypt"))')"
  set_env NETSCOPE_AUTH_PASSWORD_HASH "$HASH"
  unset AUTH_PASSWORD HASH
 fi
