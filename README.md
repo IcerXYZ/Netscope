@@ -1,4 +1,4 @@
-# NetScope Pro
+# NetScope
 
 **A friendly central dashboard for monitoring multiple Debian/Ubuntu machines on one network.**
 
@@ -133,4 +133,4 @@ If an agent does not appear, verify the central server URL and token, then from 
 curl -I http://CENTRAL-SERVER-IP:8080/health
 \`\`\`
 
-**NetScope Pro** · One dashboard. Your whole network.
+**NetScope** · One dashboard. Your whole network.
