@@ -1,0 +1,21 @@
+[Unit]
+Description=NetScope Pro monitoring dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=netscope
+Group=netscope
+WorkingDirectory=/opt/netscope-pro
+Environment=NETSCOPE_HOST=0.0.0.0
+Environment=NETSCOPE_PORT=8080
+ExecStart=/opt/netscope-pro/venv/bin/gunicorn --workers 2 --bind 0.0.0.0:8080 app:app
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
