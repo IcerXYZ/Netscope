@@ -53,7 +53,7 @@ Group=$SERVICE_USER
 WorkingDirectory=$APP_DIR
 Environment=NETSCOPE_HOST=$HOST
 Environment=NETSCOPE_PORT=$PORT
-ExecStart=$APP_DIR/venv/bin/python $APP_DIR/app.py
+ExecStart=$APP_DIR/venv/bin/gunicorn --workers 2 --bind $HOST:$PORT app:app
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
