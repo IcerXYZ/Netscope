@@ -75,7 +75,7 @@ nano .env
 docker compose up -d --build
 ```
 
-For a single host, keep `NETSCOPE_ROLE=single`. For the central dashboard, set `NETSCOPE_ROLE=server`, set NETSCOPE_BIND to the central machine's private LAN IPv4 address (not 0.0.0.0), enable dashboard authentication, and set a long random NETSCOPE_SECRET_KEY. Create the agent token registry on the Docker host before starting the central container: install -o root -g root -m 0644 /dev/null /etc/netscope-agent-tokens.json. Open http://SERVER-LAN-IP:8080 (or your selected port). After startup, create an individual token with docker compose exec netscope netscope-agent-token add proxmox-node-01; copy the token shown once into that agent's .env.
+For a single host, keep `NETSCOPE_ROLE=single`. For the central dashboard, set `NETSCOPE_ROLE=server`, set NETSCOPE_BIND to the central machine's private LAN IPv4 address (not 0.0.0.0), enable dashboard authentication, and set a long random NETSCOPE_SECRET_KEY. Create the agent token registry on the Docker host before starting any Docker deployment: install -o root -g root -m 0644 /dev/null /etc/netscope-agent-tokens.json. The registry contains password hashes, not raw agent tokens. Open http://SERVER-LAN-IP:8080 (or your selected port). After startup, create an individual token with docker compose exec netscope netscope-agent-token add proxmox-node-01; copy the token shown once into that agent's .env.
 
 ### Add a Docker agent on another Linux machine
 
