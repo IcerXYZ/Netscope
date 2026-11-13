@@ -1,0 +1,20 @@
+[Unit]
+Description=NetScope network monitoring service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=netscope
+Group=netscope
+WorkingDirectory=/opt/netscope
+EnvironmentFile=-/etc/netscope.env
+ExecStart=/opt/netscope/venv/bin/gunicorn --workers 1 --bind 0.0.0.0:8080 --access-logfile - --error-logfile - app:app
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
