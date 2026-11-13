@@ -244,9 +244,9 @@ if [[ "$USE_UFW" -eq 1 ]]; then
   else
    echo "Localhost mode: no NetScope inbound firewall rule added."
   fi
+  run_step "Enabling UFW firewall" ufw --force enable
+  echo "UFW enabled with private-subnet-only access rules."
  fi
- run_step "Enabling UFW firewall" ufw --force enable
- echo "UFW enabled with private-subnet-only access rules."
 else
  echo "UFW setup skipped; existing firewall settings were left unchanged."
 fi
