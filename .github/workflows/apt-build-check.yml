@@ -1,0 +1,16 @@
+name: Debian package build check
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y dpkg-dev
+      - run: ./packaging/build-deb.sh
+      - run: dpkg-deb --info dist/*.deb
+      - run: dpkg-deb --contents dist/*.deb
