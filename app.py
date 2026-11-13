@@ -21,7 +21,7 @@ def dashboard_authenticated():
 
 @app.before_request
 def protect_dashboard():
-    if request.endpoint in ("login", "logout", "health") or request.path.startswith("/static/"):
+    if request.endpoint in ("login", "logout", "health", "agent_report") or request.path.startswith("/static/"):
         return None
     if dashboard_authenticated():
         return None
