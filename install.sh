@@ -106,7 +106,7 @@ PY
  if [[ "$ROLE" == server ]]; then
   echo "Central server will use individual per-agent credentials."
   echo "After installation, create one with: netscope-agent-token add <agent-id>"
-  if [[ ! -f /etc/netscope-agent-tokens.json ]]; then install -m 0600 /dev/null /etc/netscope-agent-tokens.json; fi
+  if [[ ! -f /etc/netscope-agent-tokens.json ]]; then install -o root -g "$SERVICE_USER" -m 0640 /dev/null /etc/netscope-agent-tokens.json; else chown root:"$SERVICE_USER" /etc/netscope-agent-tokens.json; chmod 0640 /etc/netscope-agent-tokens.json; fi
  fi
 fi
 set_env NETSCOPE_ROLE "$ROLE"; set_env NETSCOPE_PORT "$PORT"; set_env NETSCOPE_HOST "$HOST"; set_env NETSCOPE_BIND "$HOST"; set_env NETSCOPE_AUTH_ENABLED "$AUTH_ENABLED"
@@ -134,7 +134,9 @@ if getent group systemd-journal >/dev/null 2>&1; then usermod -aG adm,systemd-jo
 install -d -o root -g "$SERVICE_USER" -m 0750 "$APP_DIR" "$APP_DIR/templates" "$APP_DIR/static"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/app.py" "$SOURCE_DIR/requirements.txt" "$APP_DIR/"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/templates/index.html" "$APP_DIR/templates/index.html"
+install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/templates/login.html" "$APP_DIR/templates/login.html"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/static/app.css" "$APP_DIR/static/app.css"
+install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/static/login.css" "$APP_DIR/static/login.css"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/static/app.js" "$APP_DIR/static/app.js"
 run_step "Preparing Python environment" python3 -m venv "$APP_DIR/venv"
 run_step "Installing dashboard libraries" "$APP_DIR/venv/bin/pip" install --disable-pip-version-check -q -r "$APP_DIR/requirements.txt"
