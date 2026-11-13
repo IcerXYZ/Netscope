@@ -75,7 +75,7 @@ nano .env
 docker compose up -d --build
 ```
 
-For a single host, keep `NETSCOPE_ROLE=single`. For the central dashboard, set `NETSCOPE_ROLE=server`, choose a strong `NETSCOPE_AGENT_TOKEN`, and set the dashboard port if needed. Generate a token with `openssl rand -hex 32`, then place it in `.env`, for example `NETSCOPE_AGENT_TOKEN=paste-generated-value`. Open `http://SERVER-IP:8080` (or your selected port). The central token must be the same on every agent.
+For a single host, keep `NETSCOPE_ROLE=single`. For the central dashboard, set `NETSCOPE_ROLE=server`, set NETSCOPE_BIND to the central machine's private LAN IPv4 address (not 0.0.0.0), enable dashboard authentication, and set a long random NETSCOPE_SECRET_KEY. Create the agent token registry on the Docker host before starting the central container: install -o root -g root -m 0644 /dev/null /etc/netscope-agent-tokens.json. Open http://SERVER-LAN-IP:8080 (or your selected port). After startup, create an individual token with docker compose exec netscope netscope-agent-token add proxmox-node-01; copy the token shown once into that agent's .env.
 
 ### Add a Docker agent on another Linux machine
 
@@ -86,7 +86,8 @@ NETSCOPE_ROLE=agent
 NETSCOPE_PORT=8080
 NETSCOPE_BIND=127.0.0.1
 NETSCOPE_SERVER_URL=http://SERVER-IP:8080
-NETSCOPE_AGENT_TOKEN=PASTE_THE_CENTRAL_TOKEN_HERE
+NETSCOPE_AGENT_ID=proxmox-node-01
+NETSCOPE_AGENT_TOKEN=PASTE_THIS_AGENTS_UNIQUE_TOKEN
 ```
 
 Then run:
@@ -221,7 +222,7 @@ For network-wide source-to-destination visibility (including traffic between two
 
 - The installer defaults to binding the dashboard to a detected private LAN IPv4 address, or offers localhost-only mode. It never defaults to `0.0.0.0`.
 - Optional dashboard authentication uses a password hash, HTTP-only SameSite session cookies, an eight-hour session lifetime and login throttling. The installer recommends enabling it.
-- Agent report credentials are unique per agent. The central server stores password hashes in `/etc/netscope-agent-tokens.json` (root-owned, mode 0600). Manage them with `netscope-agent-token add <id>`, `list`, and `revoke <id>`.
+- Agent report credentials are unique per agent. The central server stores password hashes in `/etc/netscope-agent-tokens.json` (root-owned, readable only by the NetScope service group; mode 0640). Manage them with `netscope-agent-token add <id>`, `list`, and `revoke <id>`.
 - API requests are size-limited; responses include restrictive browser security headers. Agent reports are validated and require a registered agent ID and matching token.
 - No remote command execution endpoint exists. Monitoring remains read-only.
 - LAN binding is not a substitute for firewalling. If you enable UFW, the installer scopes SSH and NetScope rules to the detected private subnet. Do not create router port forwards for NetScope.
