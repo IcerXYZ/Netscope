@@ -38,6 +38,12 @@ with urllib.request.urlopen(request,context=context) as response: assert respons
 Path('/tmp/netscope-report.json').write_bytes(body)
 PY
 sudo netscope-agent-token revoke integration-node
+sudo netscope-agent-token add concurrent-one >/tmp/netscope-token-one &
+first=$!
+sudo netscope-agent-token add concurrent-two >/tmp/netscope-token-two &
+second=$!
+wait "$first"; wait "$second"
+sudo python3 -c "import json; d=json.load(open('/etc/netscope/agents.json')); assert 'concurrent-one' in d and 'concurrent-two' in d"
 # Validate malformed configuration fails without switching a running installation.
 sudo cp /etc/netscope.env /tmp/netscope-valid.env
 printf "NETSCOPE_AUTH_ENABLED='false'\n" | sudo tee -a /etc/netscope.env >/dev/null

@@ -178,7 +178,9 @@ class SecurityTests(unittest.TestCase):
     def test_redirects_never_forward_tokens(self):
         req=urllib.request.Request('https://central.invalid/api/agent/report',data=b'{}',headers={'X-NetScope-Token':self.token})
         for url in ['http://other.invalid/','https://other.invalid/','https://central.invalid/other']:
-            with self.assertRaises(urllib.error.HTTPError): NoRedirect().redirect_request(req,None,302,'Found',{},url)
+            with self.assertRaises(urllib.error.HTTPError) as rejected:
+                NoRedirect().redirect_request(req,None,302,'Found',{},url)
+            rejected.exception.close()
 
     def test_error_details_hidden(self):
         self.login()
@@ -206,6 +208,36 @@ class SecurityTests(unittest.TestCase):
         path=Path(self.temp.name)/'env'
         path.write_text("NETSCOPE_AUTH_PASSWORD_HASH='scrypt:32768:8:1$abc$def'\n")
         self.assertEqual(read_env(path)['NETSCOPE_AUTH_PASSWORD_HASH'],'scrypt:32768:8:1$abc$def')
+
+    def test_large_logs_are_read_with_a_byte_limit(self):
+        self.intel.stop()
+        log=Path(self.temp.name)/'var/log/auth.log'
+        log.parent.mkdir(parents=True)
+        log.write_text(('Jan 1 sshd: Failed password for user from 192.168.1.3 port 12345 ssh2\n')*12000)
+        reads=[]
+        original_open=open
+        class Tracked:
+            def __init__(self,*args,**kwargs): self.file=original_open(*args,**kwargs)
+            def __enter__(self): return self
+            def __exit__(self,*args): self.file.close()
+            def seek(self,*args): return self.file.seek(*args)
+            def tell(self): return self.file.tell()
+            def read(self,size=-1): reads.append(size); return self.file.read(size)
+        with patch.dict(os.environ,NETSCOPE_HOST_ROOT=self.temp.name), \
+             patch.object(ns.psutil,'net_connections',return_value=[]), \
+             patch.object(ns.subprocess,'run',side_effect=FileNotFoundError), \
+             patch('builtins.open',Tracked):
+            result=ns.get_network_intelligence(force=True)
+        self.assertEqual(reads,[512*1024])
+        self.assertEqual(len(result['failed_logins']),100)
+
+    def test_local_telemetry_is_normalized_before_reporting(self):
+        from telemetry_schema import sanitize_local
+        data=sanitize_local({'hostname':'node','interfaces':[{'name':'eth\t0','speed_mbps':-1}]*80,'cpu_percent':float('nan')})
+        validate(data)
+        self.assertEqual(len(data['interfaces']),64)
+        self.assertEqual(data['interfaces'][0]['name'],'eth 0')
+        self.assertEqual(data['cpu_percent'],0)
 
 
 if __name__=='__main__': unittest.main()
