@@ -194,3 +194,24 @@ curl -I http://CENTRAL-SERVER-IP:8080/health
 ## Dashboard preferences
 
 Open **Settings** in the left navigation to choose a 3, 5, 10 or 15 second refresh interval, enable compact spacing, or reduce animations. These preferences are stored only in that browser and do not add background services or database load. NetScope uses lightweight vanilla JavaScript and system fonts; it does not load external font libraries or charting frameworks.
+
+
+## Network intelligence pages
+
+The dark-first dashboard now has dedicated pages for:
+
+- **Overview:** host identity, CPU/RAM/disk, uptime and current traffic.
+- **Traffic:** interface rates, packet counters, errors and drops.
+- **Connections:** local TCP/UDP socket metadata with local source address/port, remote destination address/port, protocol, state and PID.
+- **Ports & Services:** local listening sockets and frequently observed destination ports from the current socket sample.
+- **Security events:** failed SSH authentication events parsed from the local system journal or `auth.log`, including source IP, source port, attempted username and SSH target port 22.
+- **Network fleet:** connected central/agent machines.
+- **Settings:** dark/light theme, refresh interval, compact layout and reduced motion.
+
+The service account is added to the `adm` and (when present) `systemd-journal` groups so it can read authentication log entries without running the web server as root. Restart NetScope after upgrading so the new group membership takes effect.
+
+### Important visibility limits
+
+Connection and listening-port information is collected from the Linux host's local socket table; it is **not** a complete record of every device-to-device flow on the LAN. Failed SSH events come only from logs readable by the NetScope service account. The frequent-port list is a live sample, not a historical frequency database. Socket visibility may be incomplete for containers or other isolated network namespaces.
+
+For network-wide source-to-destination visibility (including traffic between two other machines), connect a switch SPAN/mirror port or network TAP to a dedicated passive sensor. The current connection pages do not claim to provide that network-wide packet view, and no packet payloads are captured or stored.
