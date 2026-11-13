@@ -39,7 +39,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
  if [[ -f "$LEGACY_ENV_FILE" ]]; then install -m 0600 "$LEGACY_ENV_FILE" "$ENV_FILE"; else install -m 0600 /dev/null "$ENV_FILE"; fi
 fi
 # Stop the previous service name during an upgrade; keep its data/config.
-systemctl disable --now netscope.service >/dev/null 2>&1 || true
+systemctl disable --now netscope-pro.service >/dev/null 2>&1 || true
 rm -f /etc/systemd/system/netscope-pro.service
 logo
 echo "How should this machine be used?"
@@ -189,7 +189,7 @@ else
 fi
 run_step "Starting NetScope in the background" systemctl enable --now netscope.service
 sleep 1
-if ! systemctl is-active --quiet netscope-pro.service; then systemctl --no-pager --full status netscope.service || true; echo "Service failed. Check: journalctl -u netscope -n 80"; exit 1; fi
+if ! systemctl is-active --quiet netscope.service; then systemctl --no-pager --full status netscope.service || true; echo "Service failed. Check: journalctl -u netscope -n 80"; exit 1; fi
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 echo; printf '\033[38;5;82m SETUP COMPLETE\033[0m\n'
 if [[ "$ROLE" == agent ]]; then
