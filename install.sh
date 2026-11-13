@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-APP_DIR="/opt/netscope-pro"; SERVICE_USER="netscope"; SERVICE_FILE="/etc/systemd/system/netscope-pro.service"
-BANNER_FILE="/etc/profile.d/netscope-banner.sh"; ENV_FILE="/etc/netscope-pro.env"; LOG_FILE="/var/log/netscope-install.log"
+APP_DIR="/opt/netscope"; SERVICE_USER="netscope"; SERVICE_FILE="/etc/systemd/system/netscope.service"
+BANNER_FILE="/etc/profile.d/netscope-banner.sh"; ENV_FILE="/etc/netscope.env"; LEGACY_ENV_FILE="/etc/netscope.env"; LOG_FILE="/var/log/netscope-install.log"
 SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)"; PORT=8080; HOST=0.0.0.0; ROLE=single; ASSUME_YES=0; USE_UFW=0
 logo() {
  clear 2>/dev/null || true; printf '\033[38;5;208m'
@@ -35,7 +35,12 @@ if [[ $EUID -ne 0 ]]; then echo "Run with sudo: sudo bash install.sh"; exit 1; f
 if [[ ! -f "$SOURCE_DIR/app.py" || ! -f "$SOURCE_DIR/requirements.txt" || ! -d "$SOURCE_DIR/templates" || ! -d "$SOURCE_DIR/static" ]]; then echo "Installer files are incomplete. Pull the latest repository and retry."; exit 1; fi
 . /etc/os-release
 case "$ID" in debian|ubuntu) ;; *) echo "Supported: Debian/Ubuntu. Detected: $PRETTY_NAME"; exit 1;; esac
-if [[ ! -f "$ENV_FILE" ]]; then install -m 0600 /dev/null "$ENV_FILE"; fi
+if [[ ! -f "$ENV_FILE" ]]; then
+ if [[ -f "$LEGACY_ENV_FILE" ]]; then install -m 0600 "$LEGACY_ENV_FILE" "$ENV_FILE"; else install -m 0600 /dev/null "$ENV_FILE"; fi
+fi
+# Stop the previous service name during an upgrade; keep its data/config.
+systemctl disable --now netscope.service >/dev/null 2>&1 || true
+rm -f /etc/systemd/system/netscope-pro.service
 logo
 echo "How should this machine be used?"
 echo "  1) Single host      Monitor only this machine"
@@ -135,8 +140,8 @@ printf '\033[90m------------------------------------------------------------\033
 printf ' NETSCOPE  /  NETWORK INTELLIGENCE\n'
 printf '\033[90m------------------------------------------------------------\033[0m\n'
 if command -v systemctl >/dev/null 2>&1; then
-  if systemctl is-active --quiet netscope-pro.service; then service_state='\033[38;5;82mONLINE\033[0m'; else service_state='\033[38;5;196mOFFLINE\033[0m'; fi
-  if systemctl is-enabled --quiet netscope-pro.service 2>/dev/null; then auto_state='Enabled'; else auto_state='Disabled'; fi
+  if systemctl is-active --quiet netscope.service; then service_state='\033[38;5;82mONLINE\033[0m'; else service_state='\033[38;5;196mOFFLINE\033[0m'; fi
+  if systemctl is-enabled --quiet netscope.service 2>/dev/null; then auto_state='Enabled'; else auto_state='Disabled'; fi
 else service_state='Unknown'; auto_state='Unknown'; fi
 up="$(uptime -p 2>/dev/null | sed 's/^up //')"
 host="$(hostname 2>/dev/null)"
@@ -144,15 +149,15 @@ role="$(sed -n 's/^NETSCOPE_ROLE=//p' /etc/netscope-pro.env 2>/dev/null | head -
 port="$(sed -n 's/^NETSCOPE_PORT=//p' /etc/netscope-pro.env 2>/dev/null | head -n1)"
 ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
 printf '\n\033[38;5;30mSYSTEM\033[0m\n'
-printf 'Host       : %s\nService    : %b\nAutostart  : %s\nUptime     : %s\n' "$host" "$service_state" "$auto_state" "\${up:-Unknown}"
+printf 'Host       : %s\nService    : %b\nAutostart  : %s\nUptime     : %s\n' "$host" "$service_state" "$auto_state" "${up:-Unknown}"
 printf '\n\033[38;5;30mDASHBOARD\033[0m\n'
 if [ "$role" = agent ]; then
   central="$(sed -n 's/^NETSCOPE_SERVER_URL=//p' /etc/netscope-pro.env 2>/dev/null | head -n1)"
-  printf 'Central    : %s\n' "\${central:-Not configured}"
+  printf 'Central    : %s\n' "${central:-Not configured}"
 else
-  printf 'Web        : http://%s:%s\n' "\${ip:-localhost}" "\${port:-8080}"
+  printf 'Web        : http://%s:%s\n' "${ip:-localhost}" "${port:-8080}"
 fi
-printf 'Logs       : journalctl -u netscope-pro -f\n'
+printf 'Logs       : journalctl -u netscope -f\n'
 printf '\n\033[90mInfrastructure monitoring.\033[0m\n\n'
 BANNER
 chmod 0644 "$BANNER_SCRIPT"
@@ -182,9 +187,9 @@ if [[ "$USE_UFW" -eq 1 ]]; then
 else
  echo "UFW setup skipped; existing firewall settings were left unchanged."
 fi
-run_step "Starting NetScope in the background" systemctl enable --now netscope-pro.service
+run_step "Starting NetScope in the background" systemctl enable --now netscope.service
 sleep 1
-if ! systemctl is-active --quiet netscope-pro.service; then systemctl --no-pager --full status netscope-pro.service || true; echo "Service failed. Check: journalctl -u netscope-pro -n 80"; exit 1; fi
+if ! systemctl is-active --quiet netscope-pro.service; then systemctl --no-pager --full status netscope.service || true; echo "Service failed. Check: journalctl -u netscope -n 80"; exit 1; fi
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 echo; printf '\033[38;5;82m SETUP COMPLETE\033[0m\n'
 if [[ "$ROLE" == agent ]]; then
@@ -192,6 +197,6 @@ if [[ "$ROLE" == agent ]]; then
 else
  echo "Role      : $ROLE"; echo "Dashboard : http://$IP:$PORT"
 fi
-echo "Service   : systemctl status netscope-pro"; echo "Logs      : journalctl -u netscope-pro -f"
+echo "Service   : systemctl status netscope"; echo "Logs      : journalctl -u netscope -f"
 echo "Config    : $ENV_FILE (Discord webhook and agent settings)"; echo "Install log: $LOG_FILE"
 echo "Security  : keep dashboard access on your trusted LAN/VPN."
