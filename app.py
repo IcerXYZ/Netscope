@@ -1,8 +1,80 @@
 #!/usr/bin/env python3
 """NetScope: read-only Linux telemetry with central push-agent clustering."""
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, redirect, url_for, session
+from werkzeug.security import check_password_hash
+from datetime import timedelta
 import os, platform, psutil, socket, time, json, threading, urllib.request, hmac, subprocess, re, collections
 app=Flask(__name__)
+app.config.update(
+    SECRET_KEY=os.environ.get("NETSCOPE_SECRET_KEY") or os.urandom(32),
+    SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Strict",
+    SESSION_COOKIE_SECURE=False, PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+    MAX_CONTENT_LENGTH=1024 * 1024,
+)
+_login_attempts={}; _login_lock=threading.Lock()
+
+def auth_enabled():
+    return os.environ.get("NETSCOPE_AUTH_ENABLED","false").lower() in ("1","true","yes","on")
+
+def dashboard_authenticated():
+    return not auth_enabled() or bool(session.get("netscope_authenticated"))
+
+@app.before_request
+def protect_dashboard():
+    if request.endpoint in ("login", "logout", "health") or request.path.startswith("/static/"):
+        return None
+    if dashboard_authenticated():
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"error":"authentication required"}), 401
+    return redirect(url_for("login", next=request.path))
+
+@app.after_request
+def security_headers(response):
+    response.headers["X-Content-Type-Options"]="nosniff"
+    response.headers["X-Frame-Options"]="DENY"
+    response.headers["Referrer-Policy"]="no-referrer"
+    response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"]="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    response.headers["Cache-Control"]="no-store" if request.path.startswith("/api/") or request.path in ("/","/login") else response.headers.get("Cache-Control","")
+    return response
+
+@app.get("/login")
+@app.post("/login")
+def login():
+    if not auth_enabled(): return redirect(url_for("index"))
+    if request.method=="GET": return render_template("login.html", error="")
+    ip=request.remote_addr or "unknown"; now=time.time()
+    with _login_lock:
+        attempts=[t for t in _login_attempts.get(ip,[]) if now-t<300]
+        if len(attempts)>=5:
+            _login_attempts[ip]=attempts
+            return render_template("login.html", error="Too many attempts. Wait five minutes."), 429
+        attempts.append(now); _login_attempts[ip]=attempts
+    username=request.form.get("username","")[:128]
+    password=request.form.get("password","")
+    expected_user=os.environ.get("NETSCOPE_AUTH_USERNAME","")
+    password_hash=os.environ.get("NETSCOPE_AUTH_PASSWORD_HASH","")
+    if username==expected_user and password_hash and check_password_hash(password_hash,password):
+        with _login_lock: _login_attempts.pop(ip,None)
+        session.clear(); session["netscope_authenticated"]=True; session.permanent=True
+        target=request.args.get("next","/")
+        if not target.startswith("/") or target.startswith("//"): target="/"
+        return redirect(target)
+    return render_template("login.html", error="Incorrect username or password."), 401
+
+@app.post("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+def load_agent_tokens():
+    path=os.environ.get("NETSCOPE_AGENT_TOKENS_FILE","/etc/netscope-agent-tokens.json")
+    try:
+        with open(path,encoding="utf-8") as handle: value=json.load(handle)
+        return value if isinstance(value,dict) else {}
+    except (OSError,ValueError): return {}
+
 _previous={}; _previous_time=time.monotonic(); _alert_last={}; _alert_lock=threading.Lock()
 _nodes={}; _nodes_lock=threading.Lock(); _agent_thread_started=False
 _intel_cache={}; _intel_cache_time=0; _intel_lock=threading.Lock()
@@ -111,12 +183,13 @@ def nodes_config():
 def agent_sender():
     server=os.environ.get("NETSCOPE_SERVER_URL","").strip().rstrip("/")
     token=os.environ.get("NETSCOPE_AGENT_TOKEN","").strip()
-    if not server or not token:
-        app.logger.error("Agent mode needs NETSCOPE_SERVER_URL and NETSCOPE_AGENT_TOKEN."); return
+    agent_id=os.environ.get("NETSCOPE_AGENT_ID","").strip()
+    if not server or not token or not agent_id:
+        app.logger.error("Agent mode needs NETSCOPE_SERVER_URL, NETSCOPE_AGENT_ID and NETSCOPE_AGENT_TOKEN."); return
     while True:
         try:
             data=get_local_status()
-            payload=json.dumps({"name":socket.gethostname(),"agent_id":socket.gethostname(),"data":data}).encode()
+            payload=json.dumps({"name":socket.gethostname(),"agent_id":agent_id,"data":data}).encode()
             req=urllib.request.Request(server+"/api/agent/report",data=payload,headers={"Content-Type":"application/json","X-NetScope-Token":token,"User-Agent":"NetScope-Agent/2"},method="POST")
             with urllib.request.urlopen(req,timeout=5) as response:response.read(256)
         except Exception as exc:app.logger.warning("Could not report to central server %s: %s",server,exc)
@@ -140,13 +213,19 @@ def status():
 
 @app.post("/api/agent/report")
 def agent_report():
-    expected=os.environ.get("NETSCOPE_AGENT_TOKEN","").strip()
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict): return jsonify({"error":"invalid JSON report"}),400
+    agent_id=str(body.get("agent_id","")).strip()
+    name=str(body.get("name","")).strip()
+    data=body.get("data")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}",agent_id) or not name or len(name)>80 or not isinstance(data,dict) or not isinstance(data.get("hostname"),str):
+        return jsonify({"error":"invalid report"}),400
+    token_hash=load_agent_tokens().get(agent_id)
     supplied=request.headers.get("X-NetScope-Token","")
-    if not expected or not hmac.compare_digest(expected,supplied):return jsonify({"error":"unauthorized"}),401
-    body=request.get_json(silent=True) or {}; name=str(body.get("name","")).strip()[:80]; data=body.get("data")
-    if not name or not isinstance(data,dict) or not data.get("hostname"):return jsonify({"error":"invalid report"}),400
+    if not isinstance(token_hash,str) or not supplied or not check_password_hash(token_hash,supplied):
+        return jsonify({"error":"unauthorized"}),401
     now=int(time.time())
-    with _nodes_lock:_nodes[name]={"name":name,"agent_id":str(body.get("agent_id",name))[:100],"online":True,"last_seen":now,"data":data,"error":""}
+    with _nodes_lock:_nodes[agent_id]={"name":name,"agent_id":agent_id,"online":True,"last_seen":now,"data":data,"error":""}
     return jsonify({"accepted":True,"received_at":now})
 
 @app.get("/api/network-intel")
