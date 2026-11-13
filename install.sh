@@ -145,14 +145,14 @@ if command -v systemctl >/dev/null 2>&1; then
 else service_state='Unknown'; auto_state='Unknown'; fi
 up="$(uptime -p 2>/dev/null | sed 's/^up //')"
 host="$(hostname 2>/dev/null)"
-role="$(sed -n 's/^NETSCOPE_ROLE=//p' /etc/netscope-pro.env 2>/dev/null | head -n1)"
-port="$(sed -n 's/^NETSCOPE_PORT=//p' /etc/netscope-pro.env 2>/dev/null | head -n1)"
+role="$(sed -n 's/^NETSCOPE_ROLE=//p' /etc/netscope.env 2>/dev/null | head -n1)"
+port="$(sed -n 's/^NETSCOPE_PORT=//p' /etc/netscope.env 2>/dev/null | head -n1)"
 ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
 printf '\n\033[38;5;30mSYSTEM\033[0m\n'
 printf 'Host       : %s\nService    : %b\nAutostart  : %s\nUptime     : %s\n' "$host" "$service_state" "$auto_state" "${up:-Unknown}"
 printf '\n\033[38;5;30mDASHBOARD\033[0m\n'
 if [ "$role" = agent ]; then
-  central="$(sed -n 's/^NETSCOPE_SERVER_URL=//p' /etc/netscope-pro.env 2>/dev/null | head -n1)"
+  central="$(sed -n 's/^NETSCOPE_SERVER_URL=//p' /etc/netscope.env 2>/dev/null | head -n1)"
   printf 'Central    : %s\n' "${central:-Not configured}"
 else
   printf 'Web        : http://%s:%s\n' "${ip:-localhost}" "${port:-8080}"
