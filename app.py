@@ -149,7 +149,15 @@ def agent_report():
     with _nodes_lock:_nodes[name]={"name":name,"agent_id":str(body.get("agent_id",name))[:100],"online":True,"last_seen":now,"data":data,"error":""}
     return jsonify({"accepted":True,"received_at":now})
 
-@app.get("/api/network-intel")\ndef network_intel():\n    try:return jsonify(get_network_intelligence(force=True))\n    except Exception as exc:\n        app.logger.exception("Network intelligence collection failed")\n        return jsonify({"error":"Network intelligence unavailable: "+str(exc)[:160]}),503\n\n@app.get("/api/cluster")
+@app.get("/api/network-intel")
+def network_intel():
+    try:
+        return jsonify(get_network_intelligence(force=True))
+    except Exception as exc:
+        app.logger.exception("Network intelligence collection failed")
+        return jsonify({"error":"Network intelligence unavailable: "+str(exc)[:160]}),503
+
+@app.get("/api/cluster")
 def cluster():
     role=os.environ.get("NETSCOPE_ROLE","single").lower(); result=[]
     if role!="agent":
