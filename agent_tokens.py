@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/opt/netscope/venv/bin/python
 import argparse, grp, json, os, secrets, sys, tempfile
 from werkzeug.security import generate_password_hash
 PATH="/etc/netscope-agent-tokens.json"
