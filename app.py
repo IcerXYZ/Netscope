@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """NetScope: read-only Linux telemetry with central push-agent clustering."""
 from flask import Flask, jsonify, render_template, request
-import os, platform, psutil, socket, time, json, threading, urllib.request, hmac
+import os, platform, psutil, socket, time, json, threading, urllib.request, hmac, subprocess, re, collections
 app=Flask(__name__)
 _previous={}; _previous_time=time.monotonic(); _alert_last={}; _alert_lock=threading.Lock()
 _nodes={}; _nodes_lock=threading.Lock(); _agent_thread_started=False
+_intel_cache={}; _intel_cache_time=0; _intel_lock=threading.Lock()
 
 def notify_discord(key,message,cooldown=900):
     hook=os.environ.get("NETSCOPE_DISCORD_WEBHOOK","").strip()
@@ -20,6 +21,60 @@ def notify_discord(key,message,cooldown=900):
             urllib.request.urlopen(req,timeout=4).read(64)
         except Exception as exc:app.logger.warning("Discord webhook failed: %s",exc)
     threading.Thread(target=send,daemon=True).start()
+
+
+PORT_NAMES={22:"SSH",53:"DNS",80:"HTTP",123:"NTP",443:"HTTPS",445:"SMB",3306:"MySQL",3389:"RDP",5432:"PostgreSQL",5900:"VNC",8080:"HTTP-ALT",8443:"HTTPS-ALT",27015:"Game"}
+def get_network_intelligence(force=False):
+    """Read local socket metadata and SSH authentication failures; never capture payloads."""
+    global _intel_cache,_intel_cache_time
+    now=time.time()
+    with _intel_lock:
+        if not force and now-_intel_cache_time<8:return _intel_cache
+    conns=[]; listeners=[]; port_counts=collections.Counter(); errors=[]
+    try:
+        for c in psutil.net_connections(kind="inet"):
+            family="IPv6" if c.family==socket.AF_INET6 else "IPv4"
+            proto="TCP" if c.type==socket.SOCK_STREAM else "UDP"
+            local_ip=c.laddr.ip if c.laddr else ""; local_port=c.laddr.port if c.laddr else 0
+            remote_ip=c.raddr.ip if c.raddr else ""; remote_port=c.raddr.port if c.raddr else 0
+            state=c.status or ("BOUND" if local_port else "UNKNOWN")
+            item={"protocol":proto,"family":family,"local_ip":local_ip,"local_port":local_port,"remote_ip":remote_ip,"remote_port":remote_port,"state":state,"pid":c.pid}
+            if state=="LISTEN":
+                listeners.append(item); port_counts[(proto,local_port)]+=1
+            elif remote_ip:
+                conns.append(item); port_counts[(proto,remote_port)]+=1
+    except (psutil.AccessDenied,OSError) as exc:errors.append("Socket metadata unavailable: "+str(exc)[:120])
+    conns.sort(key=lambda x:(x["state"]!="ESTABLISHED",x["remote_port"],x["remote_ip"]))
+    listeners.sort(key=lambda x:(x["protocol"],x["local_port"]))
+    frequent=[{"protocol":p,"port":port,"service":PORT_NAMES.get(port,"Unknown"),"observations":count} for (p,port),count in port_counts.most_common(20)]
+    failed=[]; sources=[]
+    commands=[["journalctl","-u","ssh.service","-u","sshd.service","--since","24 hours ago","--no-pager","-o","cat"]]
+    for cmd in commands:
+        try:
+            raw=subprocess.run(cmd,capture_output=True,text=True,timeout=2,check=False).stdout
+            sources.append("systemd journal")
+            for line in raw.splitlines():
+                if "Failed password" in line or "Invalid user" in line or "authentication failure" in line:
+                    match=re.search(r"from ([0-9a-fA-F:.]+) port (\d+)",line)
+                    user=re.search(r"(?:for invalid user|for) ([^ ]+)",line)
+                    failed.append({"time":"","source_ip":match.group(1) if match else "Unknown","source_port":int(match.group(2)) if match else 0,"service":"SSH","target_port":22,"username":user.group(1) if user else "Unknown","event":"Invalid user" if "Invalid user" in line else "Failed authentication","message":line[:240]})
+        except (FileNotFoundError,subprocess.TimeoutExpired):pass
+    if not sources:
+        for path in ("/var/log/auth.log","/var/log/secure"):
+            try:
+                with open(path,encoding="utf-8",errors="replace") as f: lines=f.readlines()[-5000:]
+                sources.append(path)
+                for line in lines:
+                    if "Failed password" in line or "Invalid user" in line or "authentication failure" in line:
+                        match=re.search(r"from ([0-9a-fA-F:.]+) port (\d+)",line)
+                        user=re.search(r"(?:for invalid user|for) ([^ ]+)",line)
+                        failed.append({"time":line[:15].strip(),"source_ip":match.group(1) if match else "Unknown","source_port":int(match.group(2)) if match else 0,"service":"SSH","target_port":22,"username":user.group(1) if user else "Unknown","event":"Invalid user" if "Invalid user" in line else "Failed authentication","message":line[-240:].strip()})
+                break
+            except OSError:continue
+    failed=failed[-100:][::-1]
+    result={"captured_at":int(now),"scope":"This machine's local sockets and SSH authentication log","connections":conns[:250],"connection_count":len(conns),"listeners":listeners[:150],"listener_count":len(listeners),"frequent_ports":frequent,"failed_logins":failed,"failed_login_count":len(failed),"log_sources":sources,"limitations":errors}
+    with _intel_lock:_intel_cache=result;_intel_cache_time=now
+    return result
 
 def get_local_status():
     global _previous,_previous_time
@@ -39,7 +94,7 @@ def get_local_status():
         try:
             x=p.info; processes.append({"pid":x.get("pid"),"name":x.get("name") or "unknown","user":x.get("username") or "","memory_percent":round(x.get("memory_percent") or 0,2)})
         except (psutil.NoSuchProcess,psutil.AccessDenied):pass
-    data={"timestamp":int(time.time()),"hostname":socket.gethostname(),"fqdn":socket.getfqdn(),"primary_ip":next((i["ipv4"] for i in interfaces if i["ipv4"] and i["name"]!="lo"),""),"os":platform.platform(),"kernel":platform.release(),"cpu_percent":psutil.cpu_percent(interval=None),"cpu_count":psutil.cpu_count(logical=True) or 0,"cpu_physical":psutil.cpu_count(logical=False) or 0,"cpu_frequency_mhz":freq.current if freq else 0,"load_1":load[0],"load_5":load[1],"load_15":load[2],"memory_percent":mem.percent,"memory_used":mem.used,"memory_total":mem.total,"memory_available":mem.available,"swap_percent":swap.percent,"swap_used":swap.used,"swap_total":swap.total,"disk_percent":disk.percent,"disk_used":disk.used,"disk_total":disk.total,"disk_free":disk.free,"uptime":int(time.time()-psutil.boot_time()),"interfaces":interfaces,"processes":sorted(processes,key=lambda x:x["memory_percent"],reverse=True)[:8]}
+    data={"timestamp":int(time.time()),"hostname":socket.gethostname(),"fqdn":socket.getfqdn(),"primary_ip":next((i["ipv4"] for i in interfaces if i["ipv4"] and i["name"]!="lo"),""),"os":platform.platform(),"kernel":platform.release(),"cpu_percent":psutil.cpu_percent(interval=None),"cpu_count":psutil.cpu_count(logical=True) or 0,"cpu_physical":psutil.cpu_count(logical=False) or 0,"cpu_frequency_mhz":freq.current if freq else 0,"load_1":load[0],"load_5":load[1],"load_15":load[2],"memory_percent":mem.percent,"memory_used":mem.used,"memory_total":mem.total,"memory_available":mem.available,"swap_percent":swap.percent,"swap_used":swap.used,"swap_total":swap.total,"disk_percent":disk.percent,"disk_used":disk.used,"disk_total":disk.total,"disk_free":disk.free,"uptime":int(time.time()-psutil.boot_time()),"interfaces":interfaces,"processes":sorted(processes,key=lambda x:x["memory_percent"],reverse=True)[:8],"network_intel":get_network_intelligence()}
     for metric,value in (("CPU",data["cpu_percent"]),("RAM",data["memory_percent"]),("Disk",data["disk_percent"])):
         if value>=90:notify_discord(socket.gethostname()+":"+metric,f"⚠️ **NetScope alert — {socket.gethostname()}**\n{metric} usage is {value:.1f}% (90% threshold).")
     return data
@@ -92,7 +147,7 @@ def agent_report():
     with _nodes_lock:_nodes[name]={"name":name,"agent_id":str(body.get("agent_id",name))[:100],"online":True,"last_seen":now,"data":data,"error":""}
     return jsonify({"accepted":True,"received_at":now})
 
-@app.get("/api/cluster")
+@app.get("/api/network-intel")\ndef network_intel():\n    try:return jsonify(get_network_intelligence(force=True))\n    except Exception as exc:\n        app.logger.exception("Network intelligence collection failed")\n        return jsonify({"error":"Network intelligence unavailable: "+str(exc)[:160]}),503\n\n@app.get("/api/cluster")
 def cluster():
     role=os.environ.get("NETSCOPE_ROLE","single").lower(); result=[]
     if role!="agent":
