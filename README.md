@@ -45,7 +45,7 @@ On every Debian/Ubuntu machine you want to monitor:
 3. Enter the central dashboard URL, for example \`http://192.168.6.20:8080\`.
 4. Enter the enrollment token from the central server.
 
-Agents send their telemetry to the central server every five seconds. They appear automatically in **Whole network**; no static IP list or manual node JSON is required. Give the central server a stable LAN IP or DHCP reservation so agents can always find it.
+Agents send their telemetry to the central server every five seconds. They appear automatically in **Whole network**; no static IP list or manual node JSON is required. Each agent also reports its own local socket, listening-port and SSH authentication metadata, which the central dashboard combines for fleet-wide tables. Give the central server a stable LAN IP or DHCP reservation so agents can always find it.
 
 ### 3. Network and firewall
 

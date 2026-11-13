@@ -48,7 +48,7 @@ def get_network_intelligence(force=False):
     listeners.sort(key=lambda x:(x["protocol"],x["local_port"]))
     frequent=[{"protocol":p,"port":port,"service":PORT_NAMES.get(port,"Unknown"),"observations":count} for (p,port),count in port_counts.most_common(20)]
     failed=[]; sources=[]
-    commands=[["journalctl","-u","ssh.service","-u","sshd.service","--since","24 hours ago","--no-pager","-o","cat"]]
+    commands=[["journalctl","-u","ssh.service","-u","sshd.service","--since","24 hours ago","--no-pager","-o","short-iso"]]
     for cmd in commands:
         try:
             completed=subprocess.run(cmd,capture_output=True,text=True,timeout=2,check=False)
@@ -58,7 +58,7 @@ def get_network_intelligence(force=False):
                 if "Failed password" in line or "Invalid user" in line or "authentication failure" in line:
                     match=re.search(r"from ([0-9a-fA-F:.]+) port (\d+)",line)
                     user=re.search(r"(?:for invalid user|for) ([^ ]+)",line)
-                    failed.append({"time":"","source_ip":match.group(1) if match else "Unknown","source_port":int(match.group(2)) if match else 0,"service":"SSH","target_port":22,"username":user.group(1) if user else "Unknown","event":"Invalid user" if "Invalid user" in line else "Failed authentication","message":line[:240]})
+                    failed.append({"time":line[:25].strip(),"source_ip":match.group(1) if match else "Unknown","source_port":int(match.group(2)) if match else 0,"service":"SSH","target_port":22,"username":user.group(1) if user else "Unknown","event":"Invalid user" if "Invalid user" in line else "Failed authentication","message":line[:240]})
         except (FileNotFoundError,subprocess.TimeoutExpired):pass
     if not sources:
         root=os.environ.get("NETSCOPE_HOST_ROOT","/").rstrip("/")
