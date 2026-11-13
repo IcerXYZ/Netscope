@@ -10,7 +10,8 @@ def write(data):
     fd,tmp=tempfile.mkstemp(dir=os.path.dirname(PATH),prefix=".netscope-tokens-")
     try:
         with os.fdopen(fd,"w",encoding="utf-8") as f: json.dump(data,f,indent=2); f.write("\n")
-        os.chown(tmp,0,grp.getgrnam("netscope").gr_gid); os.chmod(tmp,0o640); os.replace(tmp,PATH)
+        gid=grp.getgrnam("netscope").gr_gid if "netscope" in [g.gr_name for g in grp.getgrall()] else os.getgid()
+        os.chown(tmp,0,gid); os.chmod(tmp,0o640); os.replace(tmp,PATH)
     finally:
         if os.path.exists(tmp): os.unlink(tmp)
 p=argparse.ArgumentParser(description="Manage individual NetScope agent credentials")
