@@ -1,9 +1,8 @@
 # NetScope Pro
 
-A read-only host and network monitoring dashboard for Debian/Ubuntu VMs.
+Read-only host and network monitoring for Debian/Ubuntu VMs.
 
-## Interactive VM installer
-
+## Install
 ```bash
 sudo apt update
 sudo apt install -y git
@@ -11,34 +10,32 @@ git clone https://github.com/IcerXYZ/Netscope.git
 cd Netscope
 sudo bash install.sh
 ```
+The wizard asks for the dashboard port and listen address, prints the NetScope logo, creates the service account, venv, systemd service and shell login banner. Existing `/etc/netscope-pro.env` settings are preserved. During interactive installation you can optionally enter a Discord webhook; it is stored locally with root-only permissions and never committed to Git.
 
-The wizard displays the NetScope logo, asks for a TCP port and listen address, shows a summary and asks for confirmation. For unattended setup use `sudo bash install.sh --yes` (port 8080, listen on 0.0.0.0).
+Open `http://VM-IP:8080`. The dashboard shows CPU, RAM, disk, uptime, boot time, primary IPv4, interface IP/link state/speed, live bandwidth, packet/error/drop counters, system details and top processes.
 
-When complete, open `http://VM-IP:8080` (or the configured port). The installer creates a restricted service account, Python virtual environment, systemd service and standard NetScope shell login banner. It does not change network configuration, routes, firewall rules or Proxmox bridges.
+## Single / Cluster mode
+Use **Single** for this VM or **Cluster** to view this VM plus configured remote NetScope agents. On the central node, edit:
+```bash
+sudo nano /etc/netscope-pro.env
+```
+Add remote agents as a JSON array:
+```ini
+NETSCOPE_NODES=[{"name":"pve-node-2","url":"http://192.168.6.32:8080"},{"name":"pve-node-3","url":"http://192.168.6.33:8080"}]
+```
+Each remote node must run NetScope Pro and allow the central node to reach `/api/status`. Restart with `sudo systemctl restart netscope-pro`. This is a lightweight polling dashboard, not a distributed database or HA controller.
 
-## Dashboard data
+## Discord alerts
+Set `NETSCOPE_DISCORD_WEBHOOK` in `/etc/netscope-pro.env`. Rate-limited alerts are sent when local CPU, RAM or disk reaches 90%, or a configured cluster node is unreachable. Treat the webhook as a secret; never commit it or share it in screenshots.
 
-- CPU utilization, logical/physical core counts, frequency and load averages
-- RAM, swap, root filesystem and uptime
-- Rolling 60-sample live RX/TX bandwidth graph
-- Per-interface IPv4, link state, speed, MTU, byte/packet counters, errors and drops
-- Aggregate network totals and top processes by memory
-- Hostname, OS and kernel information
-- JSON health endpoint at `/health`
-
-## Service management
-
+## Management
 ```bash
 sudo systemctl status netscope-pro
 sudo journalctl -u netscope-pro -f
 sudo systemctl restart netscope-pro
 ```
+Update: `git pull origin main && sudo bash install.sh`
+Uninstall: `sudo bash uninstall.sh`
 
-Update an existing install: `git pull && sudo bash install.sh`.
-Uninstall: `sudo bash uninstall.sh` from the cloned repository.
-
-## Security and scope
-
-There is no built-in authentication. Keep the dashboard on a trusted LAN/VPN or behind an authenticated reverse proxy; never expose its port directly to the public internet. The agent reads OS counters and process metadata. It does not implement packet capture/deep inspection, SSH login monitoring, Fail2ban integration, multi-node management or Proxmox traffic mirroring.
-
-The `packaging/` directory and GitHub Actions retain the Debian package and signed APT repository scaffold; the VM wizard is the supported installation path for this version.
+## Security
+There is no built-in authentication. Restrict the dashboard to a trusted LAN/VPN or use an authenticated reverse proxy; never expose it directly to the public internet. Use HTTPS or a trusted management network for remote cluster nodes. NetScope reads OS counters and process metadata; it does not capture packet payloads.

@@ -4,6 +4,7 @@ APP_DIR="/opt/netscope-pro"
 SERVICE_USER="netscope"
 SERVICE_FILE="/etc/systemd/system/netscope-pro.service"
 BANNER_FILE="/etc/profile.d/netscope-banner.sh"
+ENV_FILE="/etc/netscope-pro.env"
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PORT="${NETSCOPE_PORT:-8080}"
 HOST="${NETSCOPE_HOST:-0.0.0.0}"
@@ -32,6 +33,16 @@ case "${ID:-}" in debian|ubuntu) ;; *) echo "Supported: Debian/Ubuntu. Detected:
 logo
 echo "This wizard installs NetScope Pro as a background service."
 echo "It will not change IP addresses, routes, firewall rules or Proxmox bridges."
+if [[ ! -f "$ENV_FILE" ]]; then install -m 0600 /dev/null "$ENV_FILE"; fi
+if [[ "$ASSUME_YES" -eq 0 ]]; then
+  echo "Optional Discord webhook. Leave blank to keep the current setting."
+  read -r -s -p "Discord webhook URL: " DISCORD_HOOK || true; echo
+  if [[ -n "${DISCORD_HOOK:-}" ]]; then
+    grep -v "^NETSCOPE_DISCORD_WEBHOOK=" "$ENV_FILE" > "$ENV_FILE.tmp" || true
+    printf "NETSCOPE_DISCORD_WEBHOOK=%s\n" "$DISCORD_HOOK" >> "$ENV_FILE.tmp"
+    mv "$ENV_FILE.tmp" "$ENV_FILE"; chmod 0600 "$ENV_FILE"; unset DISCORD_HOOK
+  fi
+fi
 if [[ "$ASSUME_YES" -eq 0 ]]; then
   PORT="$(ask 'Dashboard TCP port' "$PORT")"
   [[ "$PORT" =~ ^[0-9]+$ ]] && ((PORT>=1 && PORT<=65535)) || { echo "Invalid TCP port."; exit 1; }
@@ -75,6 +86,7 @@ Group=$SERVICE_USER
 WorkingDirectory=$APP_DIR
 Environment=NETSCOPE_HOST=$HOST
 Environment=NETSCOPE_PORT=$PORT
+EnvironmentFile=-$ENV_FILE
 ExecStart=$APP_DIR/venv/bin/gunicorn --workers 2 --bind $HOST:$PORT app:app
 Restart=on-failure
 RestartSec=3
@@ -112,6 +124,7 @@ printf '\033[38;5;82m INSTALLATION COMPLETE\033[0m\n'
 echo "Dashboard : http://${IP:-VM-IP}:$PORT"
 echo "Service   : systemctl status netscope-pro"
 echo "Logs      : journalctl -u netscope-pro -f"
+echo "Config    : $ENV_FILE (Discord webhook + cluster nodes)"
 echo "Login logo: shown on new interactive shell logins"
 echo
 echo "Security: no built-in login is configured. Restrict port $PORT to trusted LAN/VPN."
