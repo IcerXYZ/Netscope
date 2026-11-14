@@ -212,51 +212,14 @@ def status():
         return jsonify({"error":"Telemetry collection failed: "+str(exc)[:180]}),503
 
 @app.post("/api/agent/report")
-def sanitize_agent_value(value, depth=0, budget=None):
-    """Bound agent-supplied JSON before it enters the in-memory fleet registry."""
-    if budget is None: budget=[0]
-    budget[0]+=1
-    if budget[0]>5000 or depth>8:
-        raise ValueError("report is too complex")
-    if value is None or isinstance(value,(bool,int)):
-        return value
-    if isinstance(value,float):
-        import math
-        if not math.isfinite(value): raise ValueError("non-finite number")
-        return value
-    if isinstance(value,str):
-        if len(value)>512: raise ValueError("string field is too long")
-        return value
-    if isinstance(value,list):
-        if len(value)>500: raise ValueError("list is too large")
-        return [sanitize_agent_value(item,depth+1,budget) for item in value]
-    if isinstance(value,dict):
-        if len(value)>100: raise ValueError("object has too many fields")
-        clean={}
-        for key,item in value.items():
-            if not isinstance(key,str) or len(key)>64: raise ValueError("invalid field name")
-            clean[key]=sanitize_agent_value(item,depth+1,budget)
-        return clean
-    raise ValueError("unsupported JSON value")
-
 def agent_report():
     body=request.get_json(silent=True)
     if not isinstance(body,dict): return jsonify({"error":"invalid JSON report"}),400
     agent_id=str(body.get("agent_id","")).strip()
     name=str(body.get("name","")).strip()
     data=body.get("data")
-    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}",agent_id) or not name or len(name)>80 or not isinstance(data,dict) or not isinstance(data.get("hostname"),str) or not data.get("hostname") or len(data.get("hostname",""))>128:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}",agent_id) or not name or len(name)>80 or not isinstance(data,dict) or not isinstance(data.get("hostname"),str):
         return jsonify({"error":"invalid report"}),400
-    try:
-        data=sanitize_agent_value(data)
-        if not isinstance(data.get("interfaces",[]),list) or len(data.get("interfaces",[]))>64:
-            raise ValueError("invalid interface list")
-        if not isinstance(data.get("processes",[]),list) or len(data.get("processes",[]))>50:
-            raise ValueError("invalid process list")
-        if not isinstance(data.get("network_intel",{}),dict):
-            raise ValueError("invalid network intelligence")
-    except (ValueError,RecursionError):
-        return jsonify({"error":"report data exceeds validation limits"}),400
     token_hash=load_agent_tokens().get(agent_id)
     supplied=request.headers.get("X-NetScope-Token","")
     now_rate=time.time()
