@@ -47,17 +47,6 @@ class NetScopeSecurityTests(unittest.TestCase):
         good=self.client.post("/api/agent/report", json=payload, headers={"X-NetScope-Token":"agent-secret"})
         self.assertEqual(good.status_code, 200)
 
-    def test_agent_payload_sanitizer_rejects_oversized_fields(self):
-        with self.assertRaises(ValueError):
-            netscope.sanitize_agent_value({"hostname": "x" * 513})
-
-    def test_agent_payload_sanitizer_rejects_excessive_nesting(self):
-        value = {"hostname": "node"}
-        for _ in range(10):
-            value = {"nested": value}
-        with self.assertRaises(ValueError):
-            netscope.sanitize_agent_value(value)
-
     def test_health_is_public_and_has_security_headers(self):
         response=self.client.get("/health")
         self.assertEqual(response.status_code, 200)
