@@ -53,7 +53,7 @@ During installation, NetScope asks whether you want it to configure UFW. If you 
 
 - The central server must accept TCP connections on the dashboard port (default \`8080\`) from your trusted LAN.
 - Agents make outbound connections to the central server; they do not need inbound firewall ports opened.
-- Agent installations bind their local service to \`127.0.0.1\` by default. The central server listens on the configured address (default \`0.0.0.0\`).
+- Agent installations bind their local service to \`127.0.0.1\` by default. The central server binds to its detected private LAN IPv4 address by default, or to \`127.0.0.1\` when localhost-only mode is selected.
 - Use a trusted LAN or VPN. Do not expose the dashboard to the public internet. Dashboard login is optional and can be enabled in the installer. When enabled, use the configured username/password. NetScope binds to a private LAN IPv4 address by default, not all interfaces; localhost-only mode is also available. Do not forward the dashboard port from your router.
 - Each agent uses its own unique token. On the central server, create one with `netscope-agent-token add proxmox-node-01`, then enter that ID and token when installing the corresponding agent. Revoke it with `netscope-agent-token revoke proxmox-node-01`. Tokens are stored as password hashes on the central server and the raw token is shown only once. HTTP is currently used, so only use a trusted LAN or VPN; HTTPS support is planned.
 
@@ -165,7 +165,7 @@ sudo bash uninstall.sh
 Private settings are stored in \`/etc/netscope.env\` with root-only permissions.
 
 - \`NETSCOPE_ROLE=single|server|agent\`
-- \`NETSCOPE_AGENT_TOKEN\` shared by the central server and its agents
+- \`NETSCOPE_AGENT_ID\` and \`NETSCOPE_AGENT_TOKEN\` unique to each agent; the central server stores token hashes in \`/etc/netscope-agent-tokens.json\`
 - \`NETSCOPE_SERVER_URL\` set on agents
 - \`NETSCOPE_DISCORD_WEBHOOK\` optional private Discord webhook
 
