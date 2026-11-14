@@ -32,7 +32,7 @@ On the machine that will host the dashboard, run the installer and choose:
 
 \`2) Central server\`
 
-The installer creates a secure random enrollment token and displays it. Copy this token; you will need it when installing each agent.
+After installation, create a separate token for each agent with `sudo netscope-agent-token add proxmox-node-01`. Copy the token shown once; it is stored only as a password hash on the central server.
 
 Open the dashboard at \`http://CENTRAL-SERVER-IP:8080\`.
 
@@ -43,13 +43,13 @@ On every Debian/Ubuntu machine you want to monitor:
 1. Clone the same repository and run \`sudo bash install.sh\`.
 2. Choose \`3) Agent\`.
 3. Enter the central dashboard URL, for example \`http://192.168.6.20:8080\`.
-4. Enter the enrollment token from the central server.
+4. Enter that agent's unique token from the central server.
 
 Agents send their telemetry to the central server every five seconds. They appear automatically in **Whole network**; no static IP list or manual node JSON is required. Each agent also reports its own local socket, listening-port and SSH authentication metadata, which the central dashboard combines for fleet-wide tables. Give the central server a stable LAN IP or DHCP reservation so agents can always find it.
 
 ### 3. Network and firewall
 
-During installation, NetScope asks whether you want it to configure UFW. If you answer **yes**, it installs UFW if needed, allows TCP **22** (SSH), TCP **80** (HTTP), and the dashboard port you selected, then enables the firewall. If you answer **no**, it leaves your firewall unchanged. Check that SSH really uses port 22 before enabling UFW, especially on remote servers.
+During installation, NetScope asks whether you want it to configure UFW. If you answer **yes**, it installs UFW if needed, allows TCP **22** (SSH) and the selected dashboard port from the detected private subnet, then enables the firewall. It does not add a general HTTP port 80 rule. If you answer **no**, it leaves your firewall unchanged. Check that SSH really uses port 22 before enabling UFW, especially on remote servers.
 
 - The central server must accept TCP connections on the dashboard port (default \`8080\`) from your trusted LAN.
 - Agents make outbound connections to the central server; they do not need inbound firewall ports opened.
@@ -75,7 +75,7 @@ nano .env
 docker compose up -d --build
 ```
 
-For a single host, keep `NETSCOPE_ROLE=single`. For the central dashboard, set `NETSCOPE_ROLE=server`, set NETSCOPE_BIND to the central machine's private LAN IPv4 address (not 0.0.0.0), enable dashboard authentication, set a long random NETSCOPE_SECRET_KEY, and configure NETSCOPE_AUTH_USERNAME plus NETSCOPE_AUTH_PASSWORD_HASH. Generate the hash after the image is built with `docker compose run --rm --no-deps netscope python -c 'from werkzeug.security import generate_password_hash; print(generate_password_hash(input(), method="scrypt"))'`, then paste it into `.env`. Create the agent token registry on the Docker host before starting any Docker deployment: install -o root -g root -m 0644 /dev/null /etc/netscope-agent-tokens.json. The registry contains password hashes, not raw agent tokens. Open http://SERVER-LAN-IP:8080 (or your selected port). After startup, create an individual token with docker compose exec netscope netscope-agent-token add proxmox-node-01; copy the token shown once into that agent's .env.
+For a single host, keep `NETSCOPE_ROLE=single`. For the central dashboard, set `NETSCOPE_ROLE=server`, set NETSCOPE_BIND to the central machine's private LAN IPv4 address (not 0.0.0.0), enable dashboard authentication, set a long random NETSCOPE_SECRET_KEY, and configure NETSCOPE_AUTH_USERNAME plus NETSCOPE_AUTH_PASSWORD_HASH. Generate the hash after the image is built with `docker compose run --rm --no-deps netscope python -c 'from werkzeug.security import generate_password_hash; print(generate_password_hash(input(), method="scrypt"))'`, then paste it into `.env`. Create the agent token registry on the Docker host before starting a central-server deployment: `install -o root -g root -m 0644 /dev/null /etc/netscope-agent-tokens.json`. The registry contains password hashes, not raw agent tokens. Open http://SERVER-LAN-IP:8080 (or your selected port). After startup, create an individual token with `docker compose exec netscope netscope-agent-token add proxmox-node-01`; copy the token shown once into that agent's .env.
 
 ### Add a Docker agent on another Linux machine
 
@@ -151,7 +151,7 @@ git pull origin main
 sudo bash install.sh
 \`\`\`
 
-The installer preserves the existing Discord webhook and keeps the central server's enrollment token when updating it.
+The installer preserves the existing Discord webhook, dashboard secret and registered per-agent token hashes when updating. Re-run it from the cloned source directory; the live \\`/opt/netscope\\` install directory is not itself a Git checkout.
 
 Remove NetScope:
 
