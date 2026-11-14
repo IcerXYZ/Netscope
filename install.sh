@@ -33,7 +33,7 @@ run_step() {
 }
 for arg in "$@"; do case "$arg" in --yes|-y) ASSUME_YES=1;; --help|-h) echo "Usage: sudo bash install.sh [--yes]"; exit 0;; *) echo "Unknown option: $arg"; exit 2;; esac; done
 if [[ $EUID -ne 0 ]]; then echo "Run with sudo: sudo bash install.sh"; exit 1; fi
-if [[ ! -f "$SOURCE_DIR/app.py" || ! -f "$SOURCE_DIR/requirements.txt" || ! -d "$SOURCE_DIR/templates" || ! -d "$SOURCE_DIR/static" ]]; then echo "Installer files are incomplete. Pull the latest repository and retry."; exit 1; fi
+if [[ ! -f "$SOURCE_DIR/app.py" || ! -f "$SOURCE_DIR/agent_tokens.py" || ! -f "$SOURCE_DIR/requirements.txt" || ! -d "$SOURCE_DIR/templates" || ! -d "$SOURCE_DIR/static" ]]; then echo "Installer files are incomplete. Pull the latest repository and retry."; exit 1; fi
 . /etc/os-release
 case "$ID" in debian|ubuntu) ;; *) echo "Supported: Debian/Ubuntu. Detected: $PRETTY_NAME"; exit 1;; esac
 if [[ ! -f "$ENV_FILE" && -f /etc/netscope-pro.env ]]; then install -m 0600 /etc/netscope-pro.env "$ENV_FILE"; fi
@@ -142,7 +142,7 @@ run_step "Creating service account" bash -c "id $SERVICE_USER >/dev/null 2>&1 ||
 # Permit read-only access to system authentication logs where the distro exposes them via adm/journal.
 if getent group systemd-journal >/dev/null 2>&1; then usermod -aG adm,systemd-journal "$SERVICE_USER"; else usermod -aG adm "$SERVICE_USER"; fi
 install -d -o root -g "$SERVICE_USER" -m 0750 "$APP_DIR" "$APP_DIR/templates" "$APP_DIR/static"
-install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/app.py" "$SOURCE_DIR/requirements.txt" "$APP_DIR/"
+install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/app.py" "$SOURCE_DIR/agent_tokens.py" "$SOURCE_DIR/requirements.txt" "$APP_DIR/"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/templates/index.html" "$APP_DIR/templates/index.html"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/templates/login.html" "$APP_DIR/templates/login.html"
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/static/app.css" "$APP_DIR/static/app.css"
@@ -150,6 +150,12 @@ install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/static/login.css" "$APP_
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/static/app.js" "$APP_DIR/static/app.js"
 run_step "Preparing Python environment" python3 -m venv "$APP_DIR/venv"
 run_step "Installing dashboard libraries" "$APP_DIR/venv/bin/pip" install --disable-pip-version-check -q -r "$APP_DIR/requirements.txt"
+cat > /usr/local/bin/netscope-agent-token <<EOF
+#!/bin/sh
+exec "$APP_DIR/venv/bin/python" "$APP_DIR/agent_tokens.py" "$@"
+EOF
+chmod 0755 /usr/local/bin/netscope-agent-token
+run_step "Checking NetScope Python files" "$APP_DIR/venv/bin/python" -m py_compile "$APP_DIR/app.py" "$APP_DIR/agent_tokens.py"
 if [[ "$AUTH_ENABLED" == true ]]; then
  HASH="$(printf '%s' "$AUTH_PASSWORD" | "$APP_DIR/venv/bin/python" -c 'import sys; from werkzeug.security import generate_password_hash; print(generate_password_hash(sys.stdin.read(), method="scrypt"))')"
  set_env NETSCOPE_AUTH_PASSWORD_HASH "$HASH"
@@ -266,5 +272,5 @@ else
  if [[ "$ROLE" == server ]]; then echo "Agent tokens: netscope-agent-token add <agent-id>"; fi
 fi
 echo "Service   : systemctl status netscope"; echo "Logs      : journalctl -u netscope -f"
-echo "Config    : $ENV_FILE (Discord webhook and agent settings)"; echo "Install log: $LOG_FILE"
+echo "Agent CLI : netscope-agent-token add <agent-id> (central server only)"; echo "Config    : $ENV_FILE (Discord webhook and agent settings)"; echo "Install log: $LOG_FILE"
 echo "Security  : keep dashboard access on your trusted LAN/VPN."
