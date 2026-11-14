@@ -14,13 +14,13 @@ The dashboard shows CPU, RAM, disk, uptime, IP address, system details, network 
 
 On each Debian/Ubuntu machine:
 
-\`\`\`bash
+```bash
 sudo apt update
 sudo apt install -y git
 git clone https://github.com/IcerXYZ/Netscope.git
 cd Netscope
 sudo bash install.sh
-\`\`\`
+```
 
 The animated installer guides you through setup. It shows a compact rotating progress indicator while installing; detailed output is saved to \`/var/log/netscope-install.log\`.
 
@@ -30,19 +30,19 @@ The animated installer guides you through setup. It shows a compact rotating pro
 
 On the machine that will host the dashboard, run the installer and choose:
 
-\`2) Central server\`
+`2) Central server`
 
 The installer creates a secure random enrollment token and displays it. Copy this token; you will need it when installing each agent.
 
-Open the dashboard at \`http://CENTRAL-SERVER-IP:8080\`.
+Open the dashboard at `http://CENTRAL-SERVER-IP:8080`.
 
 ### 2. Install agents on the other machines
 
 On every Debian/Ubuntu machine you want to monitor:
 
-1. Clone the same repository and run \`sudo bash install.sh\`.
-2. Choose \`3) Agent\`.
-3. Enter the central dashboard URL, for example \`http://192.168.6.20:8080\`.
+1. Clone the same repository and run `sudo bash install.sh`.
+2. Choose `3) Agent`.
+3. Enter the central dashboard URL, for example `http://192.168.6.20:8080`.
 4. Enter the enrollment token from the central server.
 
 Agents send their telemetry to the central server every five seconds. They appear automatically in **Whole network**; no static IP list or manual node JSON is required. Each agent also reports its own local socket, listening-port and SSH authentication metadata, which the central dashboard combines for fleet-wide tables. Give the central server a stable LAN IP or DHCP reservation so agents can always find it.
@@ -51,9 +51,9 @@ Agents send their telemetry to the central server every five seconds. They appea
 
 During installation, NetScope asks whether you want it to configure UFW. If you answer **yes**, it installs UFW if needed, allows TCP **22** (SSH), TCP **80** (HTTP), and the dashboard port you selected, then enables the firewall. If you answer **no**, it leaves your firewall unchanged. Check that SSH really uses port 22 before enabling UFW, especially on remote servers.
 
-- The central server must accept TCP connections on the dashboard port (default \`8080\`) from your trusted LAN.
+- The central server must accept TCP connections on the dashboard port (default `8080`) from your trusted LAN.
 - Agents make outbound connections to the central server; they do not need inbound firewall ports opened.
-- Agent installations bind their local service to \`127.0.0.1\` by default. The central server listens on the configured address (default \`0.0.0.0\`).
+- Agent installations bind their local service to `127.0.0.1` by default. The central server listens on the configured address (default `0.0.0.0`).
 - Use a trusted LAN or VPN. Do not expose the dashboard to the public internet. Dashboard login is optional and can be enabled in the installer. When enabled, use the configured username/password. NetScope binds to a private LAN IPv4 address by default, not all interfaces; localhost-only mode is also available. Do not forward the dashboard port from your router.
 - Each agent uses its own unique token. On the central server, create one with `netscope-agent-token add proxmox-node-01`, then enter that ID and token when installing the corresponding agent. Revoke it with `netscope-agent-token revoke proxmox-node-01`. Tokens are stored as password hashes on the central server and the raw token is shown only once. HTTP is currently used, so only use a trusted LAN or VPN; HTTPS support is planned.
 
@@ -119,75 +119,75 @@ Choose **This machine** to view the central server's own detailed telemetry. Cho
 
 ## Discord alerts
 
-The installer keeps an existing Discord webhook in \`/etc/netscope.env\`. To configure one manually:
+The installer keeps an existing Discord webhook in `/etc/netscope.env`. To configure one manually:
 
-\`\`\`ini
+```ini
 NETSCOPE_DISCORD_WEBHOOK=https://discord.com/api/webhooks/REPLACE_ME
-\`\`\`
+```
 
 Restart the service after changing the file:
 
-\`\`\`bash
+```bash
 sudo systemctl restart netscope
-\`\`\`
+```
 
 Alerts are rate-limited. CPU, RAM or disk at 90% triggers a resource alert. Central servers can also notify when an agent stops reporting.
 
-**Never put a real webhook or enrollment token in GitHub, screenshots or chat messages.**
+**Never put a real webhook or enrollment token in GitHub, screenshots or chat messages.** <!-- Is this left in from a AI bot or intended? -->
 
 ## Useful commands
 
-\`\`\`bash
+```bash
 sudo systemctl status netscope
 sudo journalctl -u netscope -f
 sudo systemctl restart netscope
-\`\`\`
+```
 
 Update an existing installation:
 
-\`\`\`bash
+```bash
 cd ~/Netscope
 git pull origin main
 sudo bash install.sh
-\`\`\`
+```
 
 The installer preserves the existing Discord webhook and keeps the central server's enrollment token when updating it.
 
 Remove NetScope:
 
-\`\`\`bash
+```bash
 cd ~/Netscope
 sudo bash uninstall.sh
-\`\`\`
+```
 
 ## Configuration
 
-Private settings are stored in \`/etc/netscope.env\` with root-only permissions.
+Private settings are stored in `/etc/netscope.env` with root-only permissions.
 
-- \`NETSCOPE_ROLE=single|server|agent\`
-- \`NETSCOPE_AGENT_TOKEN\` shared by the central server and its agents
-- \`NETSCOPE_SERVER_URL\` set on agents
-- \`NETSCOPE_DISCORD_WEBHOOK\` optional private Discord webhook
+- `NETSCOPE_ROLE=single|server|agent`
+- `NETSCOPE_AGENT_TOKEN` shared by the central server and its agents
+- `NETSCOPE_SERVER_URL` set on agents
+- `NETSCOPE_DISCORD_WEBHOOK` optional private Discord webhook
 
 ## Troubleshooting
 
 Installer details:
 
-\`\`\`bash
+```bash
 sudo tail -n 80 /var/log/netscope-install.log
-\`\`\`
+```
 
 Service logs:
 
-\`\`\`bash
+```bash
 sudo journalctl -u netscope -n 100 --no-pager
-\`\`\`
+```
 
 If an agent does not appear, verify the central server URL and token, then from the agent check that the central dashboard responds:
 
-\`\`\`bash
+```bash
 curl -I http://CENTRAL-SERVER-IP:8080/health
-\`\`\`
+```
 
 **NetScope** · One dashboard. Your whole network.
 
