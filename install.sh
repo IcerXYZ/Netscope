@@ -114,9 +114,8 @@ PY
  fi
  if [[ "$ROLE" == server ]]; then
   echo "Central server will use individual per-agent credentials."
-  echo "After installation, create one with: netscope-agent-token add <agent-id>"
+  echo "After installation, the command will be available: netscope-agent-token add <agent-id>"
   set_env NETSCOPE_AGENT_TOKEN ""
-  if [[ ! -f /etc/netscope-agent-tokens.json ]]; then install -o root -g "$SERVICE_USER" -m 0640 /dev/null /etc/netscope-agent-tokens.json; else chown root:"$SERVICE_USER" /etc/netscope-agent-tokens.json; chmod 0640 /etc/netscope-agent-tokens.json; fi
  fi
 fi
 set_env NETSCOPE_ROLE "$ROLE"; set_env NETSCOPE_PORT "$PORT"; set_env NETSCOPE_HOST "$HOST"; set_env NETSCOPE_BIND "$HOST"; set_env NETSCOPE_AUTH_ENABLED "$AUTH_ENABLED"
@@ -139,6 +138,17 @@ fi
 run_step "Updating package lists" apt-get update -qq
 run_step "Installing Python requirements" apt-get install -y -qq python3 python3-venv python3-pip ca-certificates
 run_step "Creating service account" bash -c "id $SERVICE_USER >/dev/null 2>&1 || useradd --system --home-dir $APP_DIR --create-home --shell /usr/sbin/nologin $SERVICE_USER"
+if [[ "$ROLE" == server ]]; then
+ TOKEN_FILE="/etc/netscope-agent-tokens.json"
+ if [[ ! -e "$TOKEN_FILE" ]]; then install -o root -g "$SERVICE_USER" -m 0640 /dev/null "$TOKEN_FILE"; fi
+ # Initialize a new or previously empty token store, but never overwrite existing credentials.
+ if [[ ! -s "$TOKEN_FILE" ]]; then printf '{}\\n' > "$TOKEN_FILE"; fi
+ chown root:"$SERVICE_USER" "$TOKEN_FILE"; chmod 0640 "$TOKEN_FILE"
+ if ! python3 -c 'import json,sys; value=json.load(open(sys.argv[1], encoding="utf-8")); assert isinstance(value, dict)' "$TOKEN_FILE"; then
+  echo "Agent token file contains invalid JSON. It was left untouched: $TOKEN_FILE"
+  exit 1
+ fi
+fi
 # Permit read-only access to system authentication logs where the distro exposes them via adm/journal.
 if getent group systemd-journal >/dev/null 2>&1; then usermod -aG adm,systemd-journal "$SERVICE_USER"; else usermod -aG adm "$SERVICE_USER"; fi
 install -d -o root -g "$SERVICE_USER" -m 0750 "$APP_DIR" "$APP_DIR/templates" "$APP_DIR/static"
@@ -150,6 +160,9 @@ install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/static/login.css" "$APP_
 install -o root -g "$SERVICE_USER" -m 0640 "$SOURCE_DIR/static/app.js" "$APP_DIR/static/app.js"
 run_step "Preparing Python environment" python3 -m venv "$APP_DIR/venv"
 run_step "Installing dashboard libraries" "$APP_DIR/venv/bin/pip" install --disable-pip-version-check -q -r "$APP_DIR/requirements.txt"
+if [[ "$ROLE" == server ]]; then
+ install -o root -g root -m 0755 "$SOURCE_DIR/agent_tokens.py" /usr/local/bin/netscope-agent-token
+fi
 if [[ "$AUTH_ENABLED" == true ]]; then
  HASH="$(printf '%s' "$AUTH_PASSWORD" | "$APP_DIR/venv/bin/python" -c 'import sys; from werkzeug.security import generate_password_hash; print(generate_password_hash(sys.stdin.read(), method="scrypt"))')"
  set_env NETSCOPE_AUTH_PASSWORD_HASH "$HASH"
