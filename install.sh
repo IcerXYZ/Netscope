@@ -142,7 +142,7 @@ if [[ "$ROLE" == server ]]; then
  TOKEN_FILE="/etc/netscope-agent-tokens.json"
  if [[ ! -e "$TOKEN_FILE" ]]; then install -o root -g "$SERVICE_USER" -m 0640 /dev/null "$TOKEN_FILE"; fi
  # Initialize a new or previously empty token store, but never overwrite existing credentials.
- if [[ ! -s "$TOKEN_FILE" ]]; then printf '{}\\n' > "$TOKEN_FILE"; fi
+ if [[ ! -s "$TOKEN_FILE" ]]; then printf '{}\n' > "$TOKEN_FILE"; fi
  chown root:"$SERVICE_USER" "$TOKEN_FILE"; chmod 0640 "$TOKEN_FILE"
  if ! python3 -c 'import json,sys; value=json.load(open(sys.argv[1], encoding="utf-8")); assert isinstance(value, dict)' "$TOKEN_FILE"; then
   echo "Agent token file contains invalid JSON. It was left untouched: $TOKEN_FILE"
