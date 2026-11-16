@@ -202,7 +202,7 @@ def start_agent_sender():
     threading.Thread(target=agent_sender,name="netscope-agent-reporter",daemon=True).start()
 
 @app.get("/")
-def index():return render_template("index.html")
+def index():return render_template("index.html", auth_enabled=auth_enabled())
 @app.get("/api/status")
 def status():
     try:
