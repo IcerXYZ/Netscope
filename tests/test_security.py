@@ -47,6 +47,12 @@ class NetScopeSecurityTests(unittest.TestCase):
         good=self.client.post("/api/agent/report", json=payload, headers={"X-NetScope-Token":"agent-secret"})
         self.assertEqual(good.status_code, 200)
 
+    def test_logout_control_hidden_when_authentication_is_disabled(self):
+        with patch.dict(os.environ, {"NETSCOPE_AUTH_ENABLED": "false"}):
+            response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b'action="/logout"', response.data)
+
     def test_health_is_public_and_has_security_headers(self):
         response=self.client.get("/health")
         self.assertEqual(response.status_code, 200)
