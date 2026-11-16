@@ -32,7 +32,7 @@ On the machine that will host the dashboard, run the installer and choose:
 
 \`2) Central server\`
 
-The installer creates a secure random enrollment token and displays it. Copy this token; you will need it when installing each agent.
+After installation, create a separate enrollment token for every machine with `sudo netscope-agent-token add proxmox-node-01`. The token is displayed once; copy it before closing the terminal.
 
 Open the dashboard at \`http://CENTRAL-SERVER-IP:8080\`.
 
@@ -49,7 +49,7 @@ Agents send their telemetry to the central server every five seconds. They appea
 
 ### 3. Network and firewall
 
-During installation, NetScope asks whether you want it to configure UFW. If you answer **yes**, it installs UFW if needed, allows TCP **22** (SSH), TCP **80** (HTTP), and the dashboard port you selected, then enables the firewall. If you answer **no**, it leaves your firewall unchanged. Check that SSH really uses port 22 before enabling UFW, especially on remote servers.
+During installation, NetScope asks whether you want it to configure UFW. If you answer **yes**, it installs UFW if needed, adds an SSH rule for TCP **22** and (for LAN mode) a dashboard rule for the selected TCP port, scoped to the detected private subnet, then enables the firewall. It does not add a TCP 80 rule. Check that SSH really uses port 22 before enabling UFW, especially on remote servers. If you answer **no**, it leaves your firewall unchanged. Check that SSH really uses port 22 before enabling UFW, especially on remote servers.
 
 - The central server must accept TCP connections on the dashboard port (default \`8080\`) from your trusted LAN.
 - Agents make outbound connections to the central server; they do not need inbound firewall ports opened.
@@ -151,7 +151,7 @@ git pull origin main
 sudo bash install.sh
 \`\`\`
 
-The installer preserves the existing Discord webhook and keeps the central server's enrollment token when updating it.
+The installer preserves existing settings (including the Discord webhook and agent token registry) when updating an existing installation.
 
 Remove NetScope:
 
