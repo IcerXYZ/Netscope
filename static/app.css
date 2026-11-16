@@ -87,3 +87,6 @@ body[data-theme=light] .welcome p,body[data-theme=light] .welcome small{color:#d
 kbd{display:inline-grid;place-items:center;min-width:27px;height:27px;padding:0 7px;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;background:var(--surface);color:var(--text);font:700 11px ui-monospace,monospace}
 @media(max-width:1050px){.onboarding-steps{grid-template-columns:1fr}.shortcut-list{grid-template-columns:1fr}}
 @media(max-width:540px){.onboarding-step{padding:13px}.shortcut-list>div{padding:10px}}
+
+/* Onboarding command examples */
+.onboarding-step code{display:inline-block;max-width:100%;margin:5px 0;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--accent);font:600 10px ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere;white-space:normal}
