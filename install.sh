@@ -276,7 +276,11 @@ if [[ "$ROLE" == agent ]]; then
 else
  echo "Role      : $ROLE"; echo "Dashboard : http://$HOST:$PORT"
  echo "Access    : $ACCESS_MODE"
- if [[ "$ROLE" == server ]]; then echo "Agent tokens: netscope-agent-token add <agent-id>"; fi
+ if [[ "$ROLE" == server ]]; then
+  echo "Create an enrollment token for each agent:"
+  echo "  sudo netscope-agent-token add <agent-id>"
+  echo "  Copy each token immediately; it is displayed only once."
+ fi
 fi
 echo "Service   : systemctl status netscope"; echo "Logs      : journalctl -u netscope -f"
 echo "Config    : $ENV_FILE (Discord webhook and agent settings)"; echo "Install log: $LOG_FILE"
