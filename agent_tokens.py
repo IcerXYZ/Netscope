@@ -49,7 +49,11 @@ def write_tokens(data, path=DEFAULT_PATH):
             gid = grp.getgrnam("netscope").gr_gid
         except KeyError:
             gid = os.stat(path).st_gid if os.path.exists(path) else os.getgid()
-        os.chown(temporary, 0, gid)
+        # Avoid chown when the temporary file already has the desired owner/group.
+        # This also permits Docker deployments with all Linux capabilities dropped.
+        current = os.stat(temporary)
+        if current.st_uid != 0 or current.st_gid != gid:
+            os.chown(temporary, 0, gid)
         os.chmod(temporary, 0o640)
         os.replace(temporary, path)
     except OSError as exc:
