@@ -19,6 +19,7 @@ class NetScopeSecurityTests(unittest.TestCase):
             "NETSCOPE_AGENT_TOKENS_FILE": self.tokens,
         })
         self.env.start()
+        netscope._last_local_status = None
         netscope.app.config.update(TESTING=True, SECRET_KEY="test-secret")
         self.client = netscope.app.test_client()
 
@@ -52,6 +53,15 @@ class NetScopeSecurityTests(unittest.TestCase):
             response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b'action="/logout"', response.data)
+
+    def test_cluster_reuses_latest_local_sample_instead_of_resetting_traffic_rate(self):
+        cached={"hostname":"central-01","interfaces":[{"rx_rate":123.0}]}
+        netscope._last_local_status=cached
+        with patch.dict(os.environ, {"NETSCOPE_AUTH_ENABLED":"false","NETSCOPE_ROLE":"server"}), patch.object(netscope,"get_local_status") as collect:
+            response=self.client.get("/api/cluster")
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.get_json()["nodes"][0]["data"],cached)
+        collect.assert_not_called()
 
     def test_health_is_public_and_has_security_headers(self):
         response=self.client.get("/health")

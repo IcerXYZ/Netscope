@@ -113,9 +113,30 @@ Edit `.env` and recreate the container after changing its settings.
 
 **Docker notes:** This Compose file is intended for Linux Docker hosts. It uses `network_mode: host`, so Compose port mappings are not used; the dashboard listens directly on the host at the configured port. Permit that TCP port on your LAN firewall for a central server. Docker Desktop on Windows/macOS does not provide the same host network/PID visibility, so full host telemetry is not guaranteed there. The read-only `/:/host` mount exposes host files to the container for disk reporting; only run this trusted image and do not publish it to an untrusted registry. Dashboard login is optional; enable it in `.env` and configure a password hash before starting the container.
 
+### Agent token commands
+
+Run these on the central server. Each agent must have its own ID and token; the raw token is displayed once when created.
+
+```bash
+sudo netscope-agent-token add debian-node-01
+sudo netscope-agent-token list
+sudo netscope-agent-token revoke debian-node-01
+```
+
+Copy the one-time token into the agent configuration at `/etc/netscope.env`:
+
+```ini
+NETSCOPE_ROLE=agent
+NETSCOPE_SERVER_URL=http://CENTRAL-SERVER-IP:8080
+NETSCOPE_AGENT_ID=debian-node-01
+NETSCOPE_AGENT_TOKEN=PASTE_THE_ONE_TIME_TOKEN_HERE
+```
+
+Then restart the agent with `sudo systemctl restart netscope`. For Docker, run the create/list/revoke command inside the central container, for example `docker compose exec netscope netscope-agent-token add debian-node-01`.
+
 ## Dashboard
 
-Choose **This machine** to view the central server's own detailed telemetry. Choose **Whole network** to view all connected machines, online status, IP, CPU, RAM, disk, uptime and combined network throughput.
+On the **Traffic** page, use **Chart scope** to view a single server or combined network throughput. The server list shows each online server download and upload rate; selecting a server updates the chart and totals. The Network fleet page shows CPU, RAM, disk, uptime and connection status.
 
 ## Discord alerts
 
@@ -147,11 +168,20 @@ Update an existing installation:
 
 \`\`\`bash
 cd ~/Netscope
-git pull origin main
-sudo bash install.sh
+bash update.sh --host
 \`\`\`
 
 The installer preserves existing settings (including the Discord webhook and agent token registry) when updating an existing installation.
+
+To update a Docker deployment from the checked-out repository, run this instead:
+
+```bash
+cd ~/Netscope
+bash update.sh --docker
+```
+
+This fast-forward pulls the official `main` branch and rebuilds using the repository `Dockerfile` and `compose.yaml`. The project `.env` file and `./data` volume remain in place.
+
 
 Remove NetScope:
 
@@ -165,7 +195,7 @@ sudo bash uninstall.sh
 Private settings are stored in \`/etc/netscope.env\` with root-only permissions.
 
 - \`NETSCOPE_ROLE=single|server|agent\`
-- \`NETSCOPE_AGENT_TOKEN\` shared by the central server and its agents
+- \`NETSCOPE_AGENT_TOKEN\` is a unique token set only on its matching agent
 - \`NETSCOPE_SERVER_URL\` set on agents
 - \`NETSCOPE_DISCORD_WEBHOOK\` optional private Discord webhook
 
