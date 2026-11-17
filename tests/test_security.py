@@ -57,7 +57,7 @@ class NetScopeSecurityTests(unittest.TestCase):
     def test_cluster_reuses_latest_local_sample_instead_of_resetting_traffic_rate(self):
         cached={"hostname":"central-01","interfaces":[{"rx_rate":123.0}]}
         netscope._last_local_status=cached
-        with patch.dict(os.environ, {"NETSCOPE_ROLE":"server"}), patch.object(netscope,"get_local_status") as collect:
+        with patch.dict(os.environ, {"NETSCOPE_AUTH_ENABLED":"false","NETSCOPE_ROLE":"server"}), patch.object(netscope,"get_local_status") as collect:
             response=self.client.get("/api/cluster")
         self.assertEqual(response.status_code,200)
         self.assertEqual(response.get_json()["nodes"][0]["data"],cached)
