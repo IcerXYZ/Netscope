@@ -6,7 +6,7 @@ services:
     container_name: netscope
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://' + __import__('os').environ.get('NETSCOPE_BIND', '127.0.0.1') + ':' + __import__('os').environ.get('NETSCOPE_PORT', '8080') + '/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:' + __import__('os').environ.get('NETSCOPE_PORT', '8080') + '/health', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -14,25 +14,27 @@ services:
     init: true
     # Host networking lets NetScope see the host's real network interfaces.
     network_mode: host
-    # Host PID namespace lets process metadata refer to host processes.
+    # Host PID namespace lets process metadata refer to host processes, and
+    # makes /proc/1/root resolve to the host's real root filesystem.
     pid: host
     read_only: true
     tmpfs:
       - /tmp:size=32m,noexec,nosuid
     volumes:
-      # Read-only host root is used only to report host disk capacity.
-      - /:/host:ro,rslave
+      # Persistent agent-token registry, project-local.
       - ./data:/var/lib/netscope:rw
     environment:
       NETSCOPE_ROLE: ${NETSCOPE_ROLE:-single}
-      NETSCOPE_HOST: 0.0.0.0
+      # Resolves to the host's real root via the host PID namespace:
+      # gives correct root-partition disk stats and /var/log SSH-log access
+      # WITHOUT mounting the host filesystem into the container.
+      NETSCOPE_HOST_ROOT: /proc/1/root
       NETSCOPE_BIND: ${NETSCOPE_BIND:-127.0.0.1}
       NETSCOPE_PORT: ${NETSCOPE_PORT:-8080}
-      NETSCOPE_HOST_ROOT: /host
       NETSCOPE_SERVER_URL: ${NETSCOPE_SERVER_URL:-}
       NETSCOPE_AGENT_TOKEN: ${NETSCOPE_AGENT_TOKEN:-}
       NETSCOPE_AGENT_ID: ${NETSCOPE_AGENT_ID:-}
-      NETSCOPE_AUTH_ENABLED: ${NETSCOPE_AUTH_ENABLED:-false}
+      NETSCOPE_AUTH_ENABLED: ${NETSCOPE_AUTH_ENABLED:-true}
       NETSCOPE_AUTH_USERNAME: ${NETSCOPE_AUTH_USERNAME:-}
       NETSCOPE_AUTH_PASSWORD_HASH: ${NETSCOPE_AUTH_PASSWORD_HASH:-}
       NETSCOPE_SECRET_KEY: ${NETSCOPE_SECRET_KEY:-}
