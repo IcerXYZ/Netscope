@@ -104,3 +104,9 @@ body[data-theme=light] .nav:hover{background:#1b344b}
 .traffic-select-label select{font:inherit;letter-spacing:normal;text-transform:none;color:var(--text);background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 34px 10px 12px;min-height:40px}
 .good-cell{color:var(--green);font-weight:700}.bad-cell{color:var(--red);font-weight:700}
 @media(max-width:640px){.traffic-select-label{width:100%;min-width:0}.traffic-fleet-panel .panel-head{align-items:stretch;flex-direction:column}}
+
+/* Keep the overview banner readable in the corporate light theme. */
+body[data-theme=light] .welcome h2{color:var(--text)}
+body[data-theme=light] .welcome h2 em,body[data-theme=light] .eyebrow,body[data-theme=light] .section-heading>div>span,body[data-theme=light] .panel-head>div>span{color:#176d7e}
+body[data-theme=light] .welcome p,body[data-theme=light] .welcome small{color:#516b80}
+body[data-theme=light] .welcome-art label{color:#456b7d}
