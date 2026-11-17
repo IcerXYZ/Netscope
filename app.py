@@ -15,6 +15,17 @@ _login_attempts={}; _login_lock=threading.Lock(); _agent_report_times={}
 
 def auth_enabled():
     return os.environ.get("NETSCOPE_AUTH_ENABLED","false").lower() in ("1","true","yes","on")
+    
+def _warn_insecure_bind():
+    bind = os.environ.get("NETSCOPE_BIND", "")
+    if bind and not bind.rsplit(":", 1)[0].endswith(("127.0.0.1", "::1", "localhost")) \
+            and not auth_enabled():
+        app.logger.warning(
+            "SECURITY: dashboard bound to %s without authentication enabled. "
+            "Set NETSCOPE_AUTH_ENABLED=true or restrict NETSCOPE_BIND.", bind
+        )
+
+_warn_insecure_bind()
 
 def dashboard_authenticated():
     return not auth_enabled() or bool(session.get("netscope_authenticated"))
