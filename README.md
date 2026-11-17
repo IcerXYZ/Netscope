@@ -258,3 +258,17 @@ For network-wide source-to-destination visibility (including traffic between two
 - LAN binding is not a substitute for firewalling. If you enable UFW, the installer scopes SSH and NetScope rules to the detected private subnet. Do not create router port forwards for NetScope.
 - HTTPS is not included yet. Credentials and telemetry cross the LAN in plaintext; use a trusted switched network or VPN until TLS support is added.
 - The dashboard reports local interface counters and socket metadata. It does not capture all packets on a switched LAN. Network-wide visibility between other machines still requires switch port mirroring or a TAP.
+
+
+## Change the Linux service port
+
+The native systemd service reads its bind address and port from `/etc/netscope.env` at every start. This applies to single hosts, central servers and agents.
+
+```ini
+NETSCOPE_BIND=127.0.0.1
+NETSCOPE_PORT=10101
+```
+
+After editing, run `sudo systemctl restart netscope`. Use a private LAN bind address for a central dashboard that agents must reach. On each agent, `NETSCOPE_SERVER_URL=http://CENTRAL-IP:10101` selects the central destination; `NETSCOPE_PORT` selects only that agent local listening port. These ports can differ. Agents report outbound and need no inbound firewall rule.
+
+Upgrade older installs with `git pull --ff-only origin main` and `bash update.sh --host` to replace their old fixed-port systemd unit first. Changing the environment alone cannot override an old fixed `ExecStart`.
