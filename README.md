@@ -168,10 +168,20 @@ Update an existing installation:
 
 \`\`\`bash
 cd ~/Netscope
-bash update.sh
+bash update.sh --host
 \`\`\`
 
 The installer preserves existing settings (including the Discord webhook and agent token registry) when updating an existing installation.
+
+To update a Docker deployment from the checked-out repository, run this instead:
+
+```bash
+cd ~/Netscope
+bash update.sh --docker
+```
+
+This fast-forward pulls the official `main` branch and rebuilds using the repository `Dockerfile` and `compose.yaml`. The project `.env` file and `./data` volume remain in place.
+
 
 Remove NetScope:
 
