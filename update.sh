@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+MODE="${1:---host}"
 
 if [[ "${EUID}" -eq 0 ]]; then
   echo "Run update.sh as your normal Linux user, not with sudo."
@@ -12,6 +13,17 @@ if ! command -v git >/dev/null 2>&1; then
   echo "Git is required. Install it with: sudo apt install git"
   exit 1
 fi
+
+case "$MODE" in
+  --host) ;;
+  --docker)
+    if ! command -v docker >/dev/null 2>&1 || ! docker compose version >/dev/null 2>&1; then
+      echo "Docker Engine and the Docker Compose plugin are required for --docker mode."
+      exit 1
+    fi
+    ;;
+  *) echo "Usage: bash update.sh [--host|--docker]"; exit 2 ;;
+esac
 
 remote_url="$(git -C "$SOURCE_DIR" remote get-url origin 2>/dev/null || true)"
 case "$remote_url" in
@@ -25,8 +37,13 @@ if [[ "$branch" != "main" ]]; then
   exit 1
 fi
 
-echo "Fetching the latest NetScope scripts from GitHub..."
+echo "Fetching the latest NetScope code from GitHub..."
 git -C "$SOURCE_DIR" pull --ff-only origin main
 
-echo "Applying the downloaded scripts and restarting NetScope..."
-sudo bash "$SOURCE_DIR/install.sh"
+if [[ "$MODE" == "--docker" ]]; then
+  echo "Rebuilding this Docker deployment from the repository Dockerfile and compose.yaml..."
+  (cd "$SOURCE_DIR" && docker compose up -d --build)
+else
+  echo "Applying the downloaded scripts and restarting the Linux service..."
+  sudo bash "$SOURCE_DIR/install.sh"
+fi
