@@ -25,8 +25,8 @@ services:
       - ./data:/var/lib/netscope:rw
     environment:
       NETSCOPE_ROLE: ${NETSCOPE_ROLE:-single}
-      NETSCOPE_HOST: 0.0.0.0
       NETSCOPE_BIND: ${NETSCOPE_BIND:-127.0.0.1}
+      # Applies to the local listener in server, single and agent mode.
       NETSCOPE_PORT: ${NETSCOPE_PORT:-8080}
       NETSCOPE_HOST_ROOT: /host
       NETSCOPE_SERVER_URL: ${NETSCOPE_SERVER_URL:-}
