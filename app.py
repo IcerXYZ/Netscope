@@ -76,6 +76,7 @@ def load_agent_tokens():
     except (OSError,ValueError): return {}
 
 _previous={}; _previous_time=time.monotonic(); _alert_last={}; _alert_lock=threading.Lock()
+_last_local_status=None; _status_snapshot_lock=threading.Lock()
 _nodes={}; _nodes_lock=threading.Lock(); _agent_thread_started=False
 _intel_cache={}; _intel_cache_time=0; _intel_lock=threading.Lock()
 
@@ -205,8 +206,11 @@ def start_agent_sender():
 def index():return render_template("index.html", auth_enabled=auth_enabled())
 @app.get("/api/status")
 def status():
+    global _last_local_status
     try:
-        return jsonify(get_local_status())
+        data=get_local_status()
+        with _status_snapshot_lock: _last_local_status=data
+        return jsonify(data)
     except Exception as exc:
         app.logger.exception("Telemetry collection failed")
         return jsonify({"error":"Telemetry collection failed: "+str(exc)[:180]}),503
@@ -245,7 +249,8 @@ def network_intel():
 def cluster():
     role=os.environ.get("NETSCOPE_ROLE","single").lower(); result=[]
     if role!="agent":
-        local=get_local_status()
+        with _status_snapshot_lock: local=_last_local_status
+        if local is None: local=get_local_status()
         result.append({"name":local["hostname"],"url":"local","online":True,"last_seen":int(time.time()),"data":local,"kind":"central"})
     now=int(time.time())
     with _nodes_lock:reports=list(_nodes.values())
