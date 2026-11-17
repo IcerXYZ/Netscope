@@ -4,11 +4,6 @@ set -euo pipefail
 SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 MODE="${1:---host}"
 
-if [[ "${EUID}" -eq 0 ]]; then
-  echo "Run update.sh as your normal Linux user, not with sudo."
-  exit 1
-fi
-
 if ! command -v git >/dev/null 2>&1; then
   echo "Git is required. Install it with: sudo apt install git"
   exit 1
@@ -45,5 +40,9 @@ if [[ "$MODE" == "--docker" ]]; then
   (cd "$SOURCE_DIR" && docker compose up -d --build)
 else
   echo "Applying the downloaded scripts and restarting the Linux service..."
-  sudo bash "$SOURCE_DIR/install.sh"
+  if [[ "${EUID}" -eq 0 ]]; then
+    bash "$SOURCE_DIR/install.sh"
+  else
+    sudo bash "$SOURCE_DIR/install.sh"
+  fi
 fi
