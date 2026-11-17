@@ -8,9 +8,11 @@ Type=simple
 User=netscope
 Group=netscope
 WorkingDirectory=/opt/netscope
+Environment=NETSCOPE_BIND=127.0.0.1
+Environment=NETSCOPE_PORT=8080
 EnvironmentFile=-/etc/netscope.env
 # Safe local-only default. The installer writes the selected private LAN or localhost bind address.
-ExecStart=/opt/netscope/venv/bin/gunicorn --workers 1 --bind 127.0.0.1:8080 --access-logfile - --error-logfile - app:app
+ExecStart=/opt/netscope/venv/bin/gunicorn --workers 1 --bind ${NETSCOPE_BIND}:${NETSCOPE_PORT} --access-logfile - --error-logfile - app:app
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
