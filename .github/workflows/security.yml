@@ -17,6 +17,6 @@ jobs:
       - name: Compile Python
         run: python -m compileall -q app.py agent_tokens.py tests
       - name: Validate installer syntax
-        run: bash -n install.sh
+        run: bash -n install.sh uninstall.sh
       - name: Run security regression tests
         run: python -m unittest discover -s tests -v
