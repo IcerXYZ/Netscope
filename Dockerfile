@@ -10,5 +10,5 @@ COPY agent_tokens.py /usr/local/bin/netscope-agent-token
 RUN sed -i '1c#!/usr/local/bin/python' /usr/local/bin/netscope-agent-token && chmod 0750 /usr/local/bin/netscope-agent-token
 COPY templates ./templates
 COPY static ./static
-EXPOSE 8080
-CMD ["/bin/sh", "-c", "exec gunicorn --workers 1 --bind ${NETSCOPE_BIND:-0.0.0.0}:${NETSCOPE_PORT:-8080} --access-logfile - --error-logfile - app:app"]
+# The listening port comes from NETSCOPE_PORT; host networking needs no port mapping.
+CMD ["/bin/sh", "-c", "exec gunicorn --workers 1 --bind ${NETSCOPE_BIND:-127.0.0.1}:${NETSCOPE_PORT:-8080} --access-logfile - --error-logfile - app:app"]
