@@ -41,6 +41,8 @@ if [[ ! -f "$ENV_FILE" ]]; then install -m 0600 /dev/null "$ENV_FILE"; fi
 # Retire the previous service name during upgrades.
 systemctl disable --now netscope-pro.service >/dev/null 2>&1 || true
 rm -f /etc/systemd/system/netscope-pro.service /etc/profile.d/netscope-pro-banner.sh
+saved_port="$(sed -n 's/^NETSCOPE_PORT=//p' "$ENV_FILE" | tail -n 1)"
+PORT="${NETSCOPE_PORT:-${saved_port:-8080}}"
 logo
 echo "How should this machine be used?"
 echo "  1) Single host      Monitor only this machine"
@@ -54,6 +56,7 @@ else
 fi
 if [[ "$ROLE" == agent ]]; then
  HOST=127.0.0.1
+ if [[ "$ASSUME_YES" -eq 0 ]]; then PORT="$(ask 'Agent local TCP port' "$PORT")"; fi
  ACCESS_MODE=localhost
  LAN_CIDR="$(python3 - <<'PY'
 import ipaddress, subprocess
@@ -118,6 +121,8 @@ PY
   set_env NETSCOPE_AGENT_TOKEN ""
  fi
 fi
+[[ "$PORT" =~ ^[0-9]{1,5}$ ]] && ((10#$PORT>=1 && 10#$PORT<=65535)) || { echo "Invalid TCP port (use 1-65535)."; exit 1; }
+PORT="$((10#$PORT))"
 set_env NETSCOPE_ROLE "$ROLE"; set_env NETSCOPE_PORT "$PORT"; set_env NETSCOPE_HOST "$HOST"; set_env NETSCOPE_BIND "$HOST"; set_env NETSCOPE_AUTH_ENABLED "$AUTH_ENABLED"
 if [[ "$AUTH_ENABLED" == true ]]; then
  set_env NETSCOPE_AUTH_USERNAME "$AUTH_USERNAME"
@@ -179,8 +184,10 @@ Type=simple
 User=$SERVICE_USER
 Group=$SERVICE_USER
 WorkingDirectory=$APP_DIR
+Environment=NETSCOPE_BIND=127.0.0.1
+Environment=NETSCOPE_PORT=8080
 EnvironmentFile=-$ENV_FILE
-ExecStart=$APP_DIR/venv/bin/gunicorn --workers 1 --bind $HOST:$PORT app:app
+ExecStart=$APP_DIR/venv/bin/gunicorn --workers 1 --bind \${NETSCOPE_BIND}:\${NETSCOPE_PORT} app:app
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
@@ -267,12 +274,13 @@ else
  echo "UFW setup skipped; existing firewall settings were left unchanged."
 fi
 run_step "Starting NetScope in the background" systemctl enable --now netscope.service
+run_step "Restarting NetScope with updated configuration" systemctl restart netscope.service
 sleep 1
 if ! systemctl is-active --quiet netscope.service; then systemctl --no-pager --full status netscope.service || true; echo "Service failed. Check: journalctl -u netscope -n 80"; exit 1; fi
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 echo; printf '\033[38;5;82m SETUP COMPLETE\033[0m\n'
 if [[ "$ROLE" == agent ]]; then
- echo "Role      : Monitoring agent"; echo "Central   : $SERVER_URL"; echo "Status    : Sending reports every 5 seconds"; echo "Local bind: 127.0.0.1 (not exposed to LAN)"
+ echo "Role      : Monitoring agent"; echo "Central   : $SERVER_URL"; echo "Status    : Sending reports every 5 seconds"; echo "Local bind: 127.0.0.1:$PORT (not exposed to LAN)"
 else
  echo "Role      : $ROLE"; echo "Dashboard : http://$HOST:$PORT"
  echo "Access    : $ACCESS_MODE"
