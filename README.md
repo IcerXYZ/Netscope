@@ -168,8 +168,7 @@ Update an existing installation:
 
 \`\`\`bash
 cd ~/Netscope
-git pull origin main
-sudo bash install.sh
+bash update.sh
 \`\`\`
 
 The installer preserves existing settings (including the Discord webhook and agent token registry) when updating an existing installation.
