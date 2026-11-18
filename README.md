@@ -272,3 +272,10 @@ NETSCOPE_PORT=10101
 After editing, run `sudo systemctl restart netscope`. Use a private LAN bind address for a central dashboard that agents must reach. On each agent, `NETSCOPE_SERVER_URL=http://CENTRAL-IP:10101` selects the central destination; `NETSCOPE_PORT` selects only that agent local listening port. These ports can differ. Agents report outbound and need no inbound firewall rule.
 
 Upgrade older installs with `git pull --ff-only origin main` and `bash update.sh --host` to replace their old fixed-port systemd unit first. Changing the environment alone cannot override an old fixed `ExecStart`.
+
+
+## Automated checks
+
+Pull requests run the Python regression suite, JavaScript and shell syntax checks, Debian package build, Chromium dashboard interactions, a Docker central-server/agent enrollment test with different custom ports, and a native Ubuntu/systemd installation test. The native test also changes the configured port and verifies that unattended reinstall preserves the role and login credentials. These run on disposable CI machines; they do not access your servers.
+
+The Network fleet page includes first-agent setup instructions and an expandable checklist for agents that are offline or have not appeared. Native service settings are in `/etc/netscope.env`; Docker settings are in the project `.env`.

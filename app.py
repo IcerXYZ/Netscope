@@ -247,10 +247,13 @@ def network_intel():
 
 @app.get("/api/cluster")
 def cluster():
+    global _last_local_status
     role=os.environ.get("NETSCOPE_ROLE","single").lower(); result=[]
     if role!="agent":
         with _status_snapshot_lock: local=_last_local_status
-        if local is None: local=get_local_status()
+        if local is None or time.time()-local.get("timestamp",time.time())>5:
+            local=get_local_status()
+            with _status_snapshot_lock: _last_local_status=local
         result.append({"name":local["hostname"],"url":"local","online":True,"last_seen":int(time.time()),"data":local,"kind":"central"})
     now=int(time.time())
     with _nodes_lock:reports=list(_nodes.values())

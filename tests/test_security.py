@@ -63,6 +63,17 @@ class NetScopeSecurityTests(unittest.TestCase):
         self.assertEqual(response.get_json()["nodes"][0]["data"],cached)
         collect.assert_not_called()
 
+    def test_cluster_refreshes_expired_local_status(self):
+        netscope._last_local_status={"hostname":"old","timestamp":1}
+        fresh={"hostname":"current","timestamp":100}
+        with patch.dict(os.environ, {"NETSCOPE_AUTH_ENABLED":"false","NETSCOPE_ROLE":"server"}), \
+             patch.object(netscope,"get_local_status",return_value=fresh) as collect:
+            response=self.client.get("/api/cluster")
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.get_json()["nodes"][0]["data"],fresh)
+        collect.assert_called_once()
+        self.assertEqual(netscope._last_local_status,fresh)
+
     def test_health_is_public_and_has_security_headers(self):
         response=self.client.get("/health")
         self.assertEqual(response.status_code, 200)
