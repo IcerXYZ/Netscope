@@ -1,0 +1,18 @@
+name: Native service integration tests
+on:
+  push:
+    branches: [main, "quality/**"]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tests/vm-smoke.sh
+      - name: Service logs on failure
+        if: failure()
+        run: sudo journalctl -u netscope -n 80 --no-pager
