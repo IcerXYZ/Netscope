@@ -13,6 +13,6 @@ for attempt in $(seq 1 20); do
 done
 curl --fail --silent http://127.0.0.1:10103/health | python3 -c 'import json,sys; assert json.load(sys.stdin)["status"]=="ok"'
 sudo env NETSCOPE_ROLE=single bash install.sh --yes
-grep -q '^NETSCOPE_PORT=10103$' /etc/netscope.env
+sudo grep -q '^NETSCOPE_PORT=10103$' /etc/netscope.env
 curl --fail --silent http://127.0.0.1:10103/health | python3 -c 'import json,sys; assert json.load(sys.stdin)["status"]=="ok"'
 echo "PASS native installer, systemd environment port, config-only port change and port preservation on reinstall"
