@@ -110,3 +110,6 @@ body[data-theme=light] .welcome h2{color:var(--text)}
 body[data-theme=light] .welcome h2 em,body[data-theme=light] .eyebrow,body[data-theme=light] .section-heading>div>span,body[data-theme=light] .panel-head>div>span{color:#176d7e}
 body[data-theme=light] .welcome p,body[data-theme=light] .welcome small{color:#516b80}
 body[data-theme=light] .welcome-art label{color:#456b7d}
+
+.node-help,.agent-setup-help{font-size:12px;line-height:1.7;color:var(--muted)}
+.node-help p{margin:10px 0 0}.agent-setup-help{margin-top:18px;border-top:1px solid var(--line);padding-top:14px}.agent-setup-help summary{cursor:pointer;font-weight:700;color:var(--text)}.agent-setup-help pre{padding:12px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;overflow:auto}.agent-setup-help code{overflow-wrap:anywhere}#fleet-setup-status{font-size:12px;color:var(--text);line-height:1.6}
