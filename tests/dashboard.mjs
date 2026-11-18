@@ -95,6 +95,16 @@ try{
     assert.equal(await page.locator("#page-settings").evaluate(e=>e.classList.contains("active")),true);
     assert.equal(await page.locator("#sidebar").evaluate(e=>e.classList.contains("open")),false);
   });
+  await test("offline server guidance and first-agent setup are clear",async()=>{
+    await page.setViewportSize({width:1280,height:900});
+    await page.locator('.nav[data-page="cluster"]').click();
+    await page.waitForFunction(()=>document.querySelector("#fleet-setup-status").textContent.includes("offline"));
+    assert.match(await page.locator("#cluster-nodes").textContent(),/Last report|No report received/);
+    await page.locator(".agent-setup-help summary").click();
+    assert.equal(await page.locator("#central-url-hint").textContent(),new URL(page.url()).origin);
+    await page.evaluate(()=>renderFleetHelp([{kind:"central",online:true}]));
+    assert.match(await page.locator("#fleet-setup-status").textContent(),/No agents connected yet/);
+  });
   await test("no browser startup or navigation errors",async()=>assert.deepEqual(errors,[]));
 }finally{
   await browser.close();
