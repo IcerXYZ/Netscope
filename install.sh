@@ -41,15 +41,35 @@ if [[ ! -f "$ENV_FILE" ]]; then install -m 0600 /dev/null "$ENV_FILE"; fi
 # Retire the previous service name during upgrades.
 systemctl disable --now netscope-pro.service >/dev/null 2>&1 || true
 rm -f /etc/systemd/system/netscope-pro.service /etc/profile.d/netscope-pro-banner.sh
-saved_port="$(sed -n 's/^NETSCOPE_PORT=//p' "$ENV_FILE" | tail -n 1)"
-PORT="${NETSCOPE_PORT:-${saved_port:-8080}}"
+# Read settings as data, never execute the environment file as shell code.
+get_setting() {
+ local key="$1" fallback="$2" value
+ if [[ -v "$key" ]]; then printf '%s' "${!key}"; return; fi
+ value="$(sed -n "s/^${key}=//p" "$ENV_FILE" | tail -n 1)"
+ printf '%s' "${value:-$fallback}"
+}
+PORT="$(get_setting NETSCOPE_PORT 8080)"
+ROLE="$(get_setting NETSCOPE_ROLE single)"
+if [[ "$ASSUME_YES" -eq 1 ]]; then
+ HOST="$(get_setting NETSCOPE_BIND 127.0.0.1)"
+ AUTH_ENABLED="$(get_setting NETSCOPE_AUTH_ENABLED false)"
+ AUTH_USERNAME="$(get_setting NETSCOPE_AUTH_USERNAME '')"
+ AUTH_HASH="$(get_setting NETSCOPE_AUTH_PASSWORD_HASH '')"
+ if [[ "$AUTH_ENABLED" == true && -z "$AUTH_HASH" ]]; then
+  echo "Dashboard login requires NETSCOPE_AUTH_PASSWORD_HASH. Use the interactive installer to set a password."
+  exit 1
+ fi
+ if [[ -n "$AUTH_HASH" ]]; then set_env NETSCOPE_AUTH_PASSWORD_HASH "$AUTH_HASH"; fi
+ unset AUTH_HASH
+fi
 logo
 echo "How should this machine be used?"
 echo "  1) Single host      Monitor only this machine"
 echo "  2) Central server   Collect data from all agents"
 echo "  3) Monitoring agent Send this machine's data to the central server"
 if [[ "$ASSUME_YES" -eq 0 ]]; then
- read -r -p "Choose 1, 2 or 3 [1]: " choice || true; if [[ -z "$choice" ]]; then choice=1; fi
+ case "$ROLE" in server) default_choice=2;; agent) default_choice=3;; *) default_choice=1;; esac
+ read -r -p "Choose 1, 2 or 3 [$default_choice]: " choice || true; if [[ -z "$choice" ]]; then choice="$default_choice"; fi
  case "$choice" in 1) ROLE=single;; 2) ROLE=server;; 3) ROLE=agent;; *) echo "Invalid choice."; exit 1;; esac
 else
  if [[ -n "$(printenv NETSCOPE_ROLE 2>/dev/null || true)" ]]; then ROLE="$(printenv NETSCOPE_ROLE)"; fi
@@ -72,7 +92,7 @@ PY
   AGENT_ID="$(ask 'Unique agent ID (e.g. proxmox-node-01)' "$(hostname -s)")"
   read -r -s -p "Unique agent token created on the central server: " AGENT_TOKEN || true; echo
  else
-  SERVER_URL="$(printenv NETSCOPE_SERVER_URL 2>/dev/null || true)"; AGENT_TOKEN="$(printenv NETSCOPE_AGENT_TOKEN 2>/dev/null || true)"; AGENT_ID="$(printenv NETSCOPE_AGENT_ID 2>/dev/null || hostname -s)"
+  SERVER_URL="$(get_setting NETSCOPE_SERVER_URL '')"; AGENT_TOKEN="$(get_setting NETSCOPE_AGENT_TOKEN '')"; AGENT_ID="$(get_setting NETSCOPE_AGENT_ID "$(hostname -s)")"
  fi
  [[ "$SERVER_URL" =~ ^https?:// ]] || { echo "Enter a valid central server URL."; exit 1; }
  [[ -n "$AGENT_TOKEN" ]] || { echo "An enrollment token is required."; exit 1; }
@@ -168,7 +188,7 @@ run_step "Installing dashboard libraries" "$APP_DIR/venv/bin/pip" install --disa
 if [[ "$ROLE" == server ]]; then
  install -o root -g root -m 0755 "$SOURCE_DIR/agent_tokens.py" /usr/local/bin/netscope-agent-token
 fi
-if [[ "$AUTH_ENABLED" == true ]]; then
+if [[ "$AUTH_ENABLED" == true && -n "$AUTH_PASSWORD" ]]; then
  HASH="$(printf '%s' "$AUTH_PASSWORD" | "$APP_DIR/venv/bin/python" -c 'import sys; from werkzeug.security import generate_password_hash; print(generate_password_hash(sys.stdin.read(), method="scrypt"))')"
  set_env NETSCOPE_AUTH_PASSWORD_HASH "$HASH"
  unset AUTH_PASSWORD HASH
