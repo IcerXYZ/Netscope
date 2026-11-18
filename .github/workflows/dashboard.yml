@@ -1,9 +1,12 @@
 name: Dashboard browser tests
 on:
   push:
-    branches: [main, "quality/**"]
+    branches: [main]
   pull_request:
     branches: [main]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
